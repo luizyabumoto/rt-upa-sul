@@ -1,3 +1,4 @@
+import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
@@ -69,6 +70,7 @@ document.querySelector('#reset').addEventListener('click',()=>{if(confirm('Resta
 document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 settings();render();
 mountOrganizer(storage);
+mountPush();
 
 document.querySelector('#restore').addEventListener('click',()=>document.querySelector('#restore-file').click());
 document.querySelector('#restore-file').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.version!==1||!data.items||typeof data.items!=='object'||Object.keys(data.items).some(key=>!key.startsWith('rt-upa:')||typeof data.items[key]!=='string'))throw new Error('Formato de backup inválido');if(!confirm('Restaurar este backup? Os registros com a mesma chave serão substituídos. No modo online, use Salvar online para confirmar.'))return;for(const [key,value] of Object.entries(data.items))storage.setItem(key,value);settings();render();document.dispatchEvent(new Event('rt-data-restored'))}catch(error){alert(`Não foi possível restaurar: ${error.message}`)}finally{event.target.value=''}});

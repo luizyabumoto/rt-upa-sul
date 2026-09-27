@@ -1,4 +1,5 @@
 """Aplicação WSGI: autenticação, armazenamento privado e exportação."""
+import base64
 import json
 import os
 import re
@@ -8,12 +9,13 @@ from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlparse, quote
 
 from export_excel import export, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -109,6 +111,29 @@ def validate_items(items):
     return result
 
 
+def validate_subscription(sub):
+    if not isinstance(sub, dict) or not isinstance(sub.get('endpoint'), str):
+        raise ApiError(400, 'Aparelho inválido.')
+    endpoint = sub['endpoint']
+    parsed = urlparse(endpoint)
+    host = parsed.hostname or ''
+    if len(endpoint) > 2048 or parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port or parsed.fragment or not (host in ('web.push.apple.com', 'fcm.googleapis.com', 'updates.push.services.mozilla.com') or host.endswith('.push.services.mozilla.com')):
+        raise ApiError(400, 'Serviço de notificações não reconhecido.')
+    keys = sub.get('keys')
+    if not isinstance(keys, dict):
+        raise ApiError(400, 'Chaves inválidas.')
+    for name, size in [('p256dh', 65), ('auth', 16)]:
+        value = keys.get(name, '')
+        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_-]+={0,2}', value) or len(value)>100:
+            raise ApiError(400, 'Chaves inválidas.')
+        try:
+            decoded = base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+        except ValueError:
+            raise ApiError(400, 'Chaves inválidas.')
+        if len(decoded) != size or (name == 'p256dh' and decoded[0] != 4):
+            raise ApiError(400, 'Chaves inválidas.')
+
+
 def app(environ, start_response):
     extra = []
     def respond(status, body, content_type='application/json; charset=utf-8'):
@@ -145,6 +170,10 @@ def app(environ, start_response):
             if not isinstance(payload, dict):
                 raise ApiError(400, 'Pedido inválido.')
 
+        if method == 'GET' and path in ('/sw.js', '/manifest.webmanifest', '/icon.png'):
+            if path == '/icon.png':
+                return respond(200, base64.b64decode((ROOT / 'icon.png.b64').read_text()), 'image/png')
+            return respond(200, (ROOT / path.lstrip('/')).read_bytes(), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json')
         if path == '/login' and method == 'GET':
             return respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
         if path == '/src/login.js' and method == 'GET':
@@ -183,6 +212,27 @@ def app(environ, start_response):
             return respond(200, (ROOT / 'src/seed.json').read_bytes())
         if path == '/api/session' and method == 'GET':
             return respond(200, {'email': user.get('email'), 'id': user['id']})
+        if path.startswith('/api/push/') and method == 'POST':
+            action = path.rsplit('/', 1)[-1]
+            if action == 'config':
+                return respond(200, remote('/functions/v1/rt-push', 'POST', {'action': 'config'}, token))
+            if action == 'subscribe':
+                sub = payload.get('subscription')
+                validate_subscription(sub)
+                remote('/rest/v1/rpc/rt_register_push', 'POST', {'p_endpoint': sub['endpoint'], 'p_subscription': sub}, token)
+                return respond(200, {'ok': True})
+            endpoint = payload.get('endpoint')
+            if not isinstance(endpoint, str) or len(endpoint) > 2048:
+                raise ApiError(400, 'Aparelho inválido.')
+            if action == 'status':
+                rows = remote('/rest/v1/rt_push_subscriptions?select=enabled&endpoint=eq.' + quote(endpoint, safe=''), token=token)
+                return respond(200, {'enabled': bool(rows and rows[0]['enabled'])})
+            if action == 'disable':
+                remote('/rest/v1/rpc/rt_disable_push', 'POST', {'p_endpoint': endpoint}, token)
+                return respond(200, {'ok': True})
+            if action == 'test':
+                return respond(200, remote('/functions/v1/rt-push', 'POST', {'action': 'test', 'endpoint': endpoint}, token))
+            raise ApiError(404, 'Ação desconhecida.')
         if path == '/api/state' and method == 'GET':
             rows = remote('/rest/v1/rt_state?select=items,revision', token=token)
             return respond(200, rows[0] if rows else {'items': {}, 'revision': 0})
