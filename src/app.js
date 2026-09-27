@@ -1,3 +1,4 @@
+import {mountAssistant} from './assistant.js';
 import {doctorSearchButton} from './doctor-picker.js';
 import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
@@ -79,6 +80,7 @@ mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);
 mountQuickView(storage,seed);
+mountAssistant(storage,seed);
 document.querySelector('#fixed-form').hidden=true;
 document.addEventListener("rt-schedule-changed",render);
 document.addEventListener("rt-data-restored",()=>{settings();render();});

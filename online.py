@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
