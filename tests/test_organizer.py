@@ -3,6 +3,12 @@ import unittest
 from online import validate_items, ApiError
 
 class OrganizerValidation(unittest.TestCase):
+    def test_vacation_dates(self):
+        item=self.item();item.update(type='Férias',doctor='Thiago',date='2026-10-10',endDate='2026-10-15')
+        validate_items({'rt-upa:organizer':json.dumps([item])})
+        for invalid in ['2026-10-09','2026-02-30','']:
+            item['endDate']=invalid
+            with self.assertRaises(ApiError):validate_items({'rt-upa:organizer':json.dumps([item])})
     def item(self):
         return dict(id='test',kind='task',title='Confirmar cobertura',body='<texto literal>',date='2026-10-03',reminder='2026-09-27',shift='Diurno',status='Aguardando confirmação',doctor='',cover='')
     def test_valid_and_legacy(self):

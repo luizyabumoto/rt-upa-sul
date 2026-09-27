@@ -90,9 +90,9 @@ def validate_items(items):
                 raise ApiError(400, 'Lista de anotações inválida.')
             seen = set()
             for item in parsed:
-                if not isinstance(item, dict) or not {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}.issubset(item) or isinstance(item,dict) and set(item)-{'id','kind','title','body','date','reminder','shift','status','doctor','cover','type','needed'}:
+                if not isinstance(item, dict) or not {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}.issubset(item) or isinstance(item,dict) and set(item)-{'id','kind','title','body','date','reminder','shift','status','doctor','cover','type','needed','endDate'}:
                     raise ApiError(400, 'Anotação inválida.')
-                if item.get('type','Cobertura') not in ('Cobertura','Troca de plantão','Atestado / afastamento','Outro') or type(item.get('needed',1)) is not int or not 1<=item.get('needed',1)<=20:
+                if item.get('type','Cobertura') not in ('Cobertura','Troca de plantão','Atestado / afastamento','Férias','Outro') or type(item.get('needed',1)) is not int or not 1<=item.get('needed',1)<=20:
                     raise ApiError(400,'Tipo ou quantidade de cobertura inválidos.')
                 limits = {'id': 100, 'title': 160, 'body': 10000, 'doctor': 500, 'cover': 500}
                 if any(not isinstance(item.get(k), str) or len(item[k]) > limit for k, limit in limits.items()):
@@ -103,8 +103,8 @@ def validate_items(items):
                 if item['kind'] not in ('task', 'note') or item['status'] not in ('Precisa de cobertura', 'Aguardando confirmação', 'Em acompanhamento', 'Resolvido') or item['shift'] not in ('', 'Diurno', 'Noturno', 'Visitador', 'Cinderela'):
                     raise ApiError(400, 'Situação de anotação inválida.')
                 from datetime import date
-                for field in ('date', 'reminder'):
-                    value = item[field]
+                for field in ('date', 'reminder', 'endDate'):
+                    value = item.get(field, '')
                     if not isinstance(value, str):
                         raise ApiError(400, 'Data inválida.')
                     if value:
@@ -113,6 +113,8 @@ def validate_items(items):
                                 raise ValueError()
                         except ValueError:
                             raise ApiError(400, 'Data inválida.')
+                if item.get('type') == 'Férias' and item['kind'] == 'task' and (not item['doctor'].strip() or not item['date'] or not item.get('endDate') or item['endDate'] < item['date']):
+                    raise ApiError(400, 'Confira médico e período das férias.')
         elif name in ('doctors', 'fixed', 'absences'):
             if not isinstance(parsed, list) or len(parsed) > 2000:
                 raise ApiError(400, 'Lista inválida.')
