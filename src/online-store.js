@@ -18,7 +18,7 @@ export async function connectStore() {
   const state = await response.json();
   let revision = state.revision, dirty = false, saving = false, generation = 0;
   const banner = document.createElement('div');
-  banner.className = 'toolbar';
+  banner.className = 'toolbar account-bar';
   banner.style.marginBottom = '16px';
   const account = document.createElement('span'); account.textContent = session.email;
   const status = document.createElement('span'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');

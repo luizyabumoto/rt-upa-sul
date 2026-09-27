@@ -13,7 +13,7 @@ from export_excel import export, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -52,7 +52,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -61,7 +61,33 @@ def validate_items(items):
         except (ValueError, TypeError):
             raise ApiError(400, 'Backup inválido.')
         name = key[7:]
-        if name in ('doctors', 'fixed', 'absences'):
+        if name == 'organizer':
+            if not isinstance(parsed, list) or len(parsed) > 2000:
+                raise ApiError(400, 'Lista de anotações inválida.')
+            seen = set()
+            for item in parsed:
+                if not isinstance(item, dict) or set(item) != {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}:
+                    raise ApiError(400, 'Anotação inválida.')
+                limits = {'id': 100, 'title': 160, 'body': 10000, 'doctor': 500, 'cover': 500}
+                if any(not isinstance(item.get(k), str) or len(item[k]) > limit for k, limit in limits.items()):
+                    raise ApiError(400, 'Texto de anotação inválido.')
+                if not item['id'] or item['id'] in seen or not item['title'].strip():
+                    raise ApiError(400, 'Identificação de anotação inválida.')
+                seen.add(item['id'])
+                if item['kind'] not in ('task', 'note') or item['status'] not in ('Precisa de cobertura', 'Aguardando confirmação', 'Em acompanhamento', 'Resolvido') or item['shift'] not in ('', 'Diurno', 'Noturno', 'Visitador'):
+                    raise ApiError(400, 'Situação de anotação inválida.')
+                from datetime import date
+                for field in ('date', 'reminder'):
+                    value = item[field]
+                    if not isinstance(value, str):
+                        raise ApiError(400, 'Data inválida.')
+                    if value:
+                        try:
+                            if date.fromisoformat(value).isoformat() != value:
+                                raise ValueError()
+                        except ValueError:
+                            raise ApiError(400, 'Data inválida.')
+        elif name in ('doctors', 'fixed', 'absences'):
             if not isinstance(parsed, list) or len(parsed) > 2000:
                 raise ApiError(400, 'Lista inválida.')
             for item in parsed:
