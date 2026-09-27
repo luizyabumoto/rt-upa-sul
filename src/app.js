@@ -1,3 +1,4 @@
+import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
 import {segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage} from './scheduling.js';
@@ -73,6 +74,7 @@ settings();render();
 mountOrganizer(storage,seed);
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
+mountPdf(storage);
 document.querySelector('#fixed-form').hidden=true;
 document.addEventListener("rt-schedule-changed",render);
 document.addEventListener("rt-data-restored",()=>{settings();render();});

@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -294,6 +294,15 @@ def app(environ, start_response):
                 body=target.read_bytes()
             extra.append(('Content-Disposition','attachment; filename="ESCALA_CINDERELAS.xlsx"'))
             return respond(200,body,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        if path == '/api/export-pdf' and method == 'POST':
+            from export_pdf import export_pdf
+            data=validate_items(payload.get('items'))
+            try:
+                body=export_pdf(payload.get('year'),payload.get('month'),payload.get('half'),payload.get('kind'),payload.get('layout'),data)
+            except ValueError as error:
+                raise ApiError(400,str(error))
+            extra.append(('Content-Disposition','attachment; filename="ESCALA_UPA_SUL.pdf"'))
+            return respond(200,body,'application/pdf')
         if path == '/api/export' and method == 'POST':
             data = validate_items(payload.get('items'))
             year, month, half = (payload.get(k) for k in ('year', 'month', 'half'))

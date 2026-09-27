@@ -26,7 +26,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != '/api/export':
+        if urlparse(self.path).path not in ('/api/export','/api/export-pdf'):
             self.send_error(404)
             return
         try:
@@ -43,6 +43,14 @@ class Handler(SimpleHTTPRequestHandler):
                 if not key.startswith('rt-upa:') or not isinstance(value, str):
                     raise ValueError('Backup inválido')
                 backup[key[7:]] = json.loads(value)
+            if urlparse(self.path).path == '/api/export-pdf':
+                from export_pdf import export_pdf
+                data=export_pdf(year,month,half,payload.get('kind'),payload.get('layout'),backup)
+                self.send_response(200)
+                self.send_header('Content-Type','application/pdf')
+                self.send_header('Content-Disposition','attachment; filename="ESCALA_UPA_SUL.pdf"')
+                self.send_header('Content-Length',str(len(data)))
+                self.end_headers();self.wfile.write(data);return
             with tempfile.TemporaryDirectory(prefix='rt-upa-') as temp:
                 output = Path(temp) / 'escala.xlsx'
                 export(year, month, half, backup, DEFAULT_TEMPLATE, output)
