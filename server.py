@@ -14,6 +14,17 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def do_GET(self):
+        if urlparse(self.path).path == '/api/session':
+            data = b'{"mode":"local"}'
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        super().do_GET()
+
     def do_POST(self):
         if urlparse(self.path).path != '/api/export':
             self.send_error(404)
