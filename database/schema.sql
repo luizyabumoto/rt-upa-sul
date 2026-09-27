@@ -43,6 +43,8 @@ begin
   end if;
   return next_revision;
 end;
+$$;
 revoke all on function public.save_rt_state(jsonb, integer) from public, anon;
 grant execute on function public.save_rt_state(jsonb, integer) to authenticated;
 commit;
+
