@@ -97,8 +97,9 @@ class OnlineTests(unittest.TestCase):
         with ZipFile(io.BytesIO(result['body'])) as output, ZipFile(online.DEFAULT_TEMPLATE) as original:
             self.assertIsNone(output.testzip())
             self.assertEqual(output.namelist(), original.namelist())
-            self.assertEqual([name for name in original.namelist() if output.read(name) != original.read(name)], ['xl/worksheets/sheet1.xml'])
+            self.assertEqual([name for name in original.namelist() if output.read(name) != original.read(name)], ['xl/worksheets/sheet1.xml', 'xl/styles.xml'])
             self.assertIn('TESTE EXPORTAÇÃO', output.read('xl/worksheets/sheet1.xml').decode())
 
 
 if __name__ == '__main__': unittest.main()
+

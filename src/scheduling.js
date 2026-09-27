@@ -11,6 +11,23 @@ export function vacationConflicts(storage,doctor,date,slot=0){
  return parse(storage,'organizer',[]).filter(x=>x.kind==='task'&&x.type==='Férias'&&doctorIdentity(x.doctor)===doctorIdentity(doctor)&&x.date&&x.endDate&&x.date<=end&&x.endDate>=date);
 }
 export const vacationMessage=item=>`Em férias de ${item.date.split('-').reverse().join('/')} a ${item.endDate.split('-').reverse().join('/')} — confira a escala.`;
-export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;if(Object.hasOwn(edits,key))return edits[key];const weekday=new Date(date+'T12:00:00').getDay();const rule=parse(storage,'fixed',[]).find(x=>x.weekday===weekday&&x.slot===slot);if(rule)return rule.doctor;return (slot>=14?(seed.cinderelas||[]).find(x=>x.weekday===weekday&&x.slot===slot):seed.assignments.find(x=>x.date===date&&x.slot===slot))?.doctor||'';}
+export const affiliation=doctor=>/EXTRA/i.test(doctor)?'EXTRA SMS':/COAPH/i.test(doctor)?'COAPH':doctor?'SMS':'';
+export const affiliationClass=doctor=>affiliation(doctor)==='COAPH'?'link-coaph':affiliation(doctor)==='EXTRA SMS'?'link-extra':'link-sms';
+export function patternFor(seed,date){return (seed.patterns||[]).filter(x=>x.start<=date&&(!x.end||date<=x.end)).sort((a,b)=>b.start.localeCompare(a.start))[0];}
+export function recurringRule(seed,storage,date,weekday,slot){
+ const overrides=parse(storage,'roster',[]).filter(x=>x.start<=date&&x.weekday===weekday&&x.slot===slot).sort((a,b)=>b.start.localeCompare(a.start)||b.id.localeCompare(a.id));
+ if(overrides.length)return {...overrides[0],status:'custom'};
+ const legacy=parse(storage,'fixed',[]).find(x=>Number(x.weekday)===weekday&&Number(x.slot)===slot);if(legacy)return {...legacy,status:'custom'};
+ if(slot>=14)return {...(seed.cinderelas||[]).find(x=>x.weekday===weekday&&x.slot===slot),status:'regular'};
+ return patternFor(seed,date)?.rules.find(x=>x.weekday===weekday&&x.slot===slot);
+}
+export function plannedDoctor(seed,storage,date,slot){
+ const weekday=new Date(date+'T12:00:00').getDay(),rule=recurringRule(seed,storage,date,weekday,slot);
+ if(rule?.status==='custom')return rule.doctor;
+ if(slot>=14)return rule?.doctor||'';
+ const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);if(exact)return exact.doctor;
+ return rule?.doctor||'';
+}
+export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;return Object.hasOwn(edits,key)?edits[key]:plannedDoctor(seed,storage,date,slot);}
 export function segments(seed,storage,date,slot){const [start,end]=bounds(slot),base=baseDoctor(seed,storage,date,slot);const covers=parse(storage,'coverages',[]).filter(x=>x.confirmed&&x.date===date&&x.slot===slot).sort((a,b)=>a.start-b.start);const result=[];let cursor=start;for(const c of covers){if(c.start>cursor)result.push({start:cursor,end:c.start,doctor:base});result.push({...c,coverage:true});cursor=c.end;}if(cursor<end)result.push({start:cursor,end,doctor:base});return result;}
 export function validateCoverage(item,existing){const [start,end]=bounds(item.slot);if(!Number.isInteger(item.slot)||item.slot<0||item.slot>15||!item.date||!item.doctor||!Number.isInteger(item.start)||!Number.isInteger(item.end)||item.start<start||item.end>end||item.start>=item.end)throw new Error('Confira data, posto, médico e intervalo da cobertura.');if(existing.some(x=>x.confirmed&&x.id!==item.id&&x.date===item.date&&x.slot===item.slot&&x.start<item.end&&item.start<x.end))throw new Error('Já existe uma cobertura confirmada nesse intervalo. Desfaça a anterior para substituí-la.');}

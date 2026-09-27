@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -54,7 +54,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(coverages|organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -115,6 +115,21 @@ def validate_items(items):
                             raise ApiError(400, 'Data inválida.')
                 if item.get('type') == 'Férias' and item['kind'] == 'task' and (not item['doctor'].strip() or not item['date'] or not item.get('endDate') or item['endDate'] < item['date']):
                     raise ApiError(400, 'Confira médico e período das férias.')
+        elif name == 'roster':
+            if not isinstance(parsed,list) or len(parsed)>2000:
+                raise ApiError(400,'Lista de dias fixos inválida.')
+            seen=set()
+            from datetime import date
+            for item in parsed:
+                if not isinstance(item,dict) or set(item)!={'id','start','weekday','slot','doctor'} or not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=100 or type(item.get('weekday')) is not int or not 0<=item['weekday']<=6 or type(item.get('slot')) is not int or not 0<=item['slot']<16 or not isinstance(item.get('doctor'),str) or len(item['doctor'])>500:
+                    raise ApiError(400,'Dia fixo inválido.')
+                try:
+                    if date.fromisoformat(item['start']).isoformat()!=item['start']:raise ValueError()
+                except (ValueError,TypeError):raise ApiError(400,'Data de vigência inválida.')
+                key=(item['start'],item['weekday'],item['slot'])
+                if key in seen:raise ApiError(400,'Dois padrões para o mesmo posto e data.')
+                if 'EXTRA' in item['doctor'].upper():raise ApiError(400,'Extras devem ser registrados por data.')
+                seen.add(key)
         elif name in ('doctors', 'fixed', 'absences'):
             if not isinstance(parsed, list) or len(parsed) > 2000:
                 raise ApiError(400, 'Lista inválida.')

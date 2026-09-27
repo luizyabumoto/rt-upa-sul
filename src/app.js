@@ -1,5 +1,6 @@
+import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {segments,baseDoctor,vacationConflicts,vacationMessage} from './scheduling.js';
+import {segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
@@ -17,24 +18,18 @@ const put=(key,value)=>storage.setItem(`rt-upa:${key}`,JSON.stringify(value));
 const monthEl=document.querySelector('#month');months.forEach((m,i)=>monthEl.add(new Option(m,i+1)));monthEl.value='10';
 WEEKDAYS.forEach((day,i)=>document.querySelector('#fixed-weekday').add(new Option(day,i)));
 slotNames.forEach((name,i)=>document.querySelector('#fixed-slot').add(new Option(name,i)));
-function doctors(){return ['',...new Set([...seed.physicians,...get('doctors',[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function doctors(){return ['',...new Set([...seed.physicians,...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
 const label=d=>d?d.replace(/\n/g,' · '):'— Vago —';
 function fillDoctorSelect(select){const selected=select.value;select.replaceChildren();for(const doctor of doctors())select.add(new Option(label(doctor),doctor));select.value=selected||''}
 function weekdayDoctor(weekday,slot){const date=fortnight(2026,10,1).find(d=>d.weekday===weekday);return date?source.get(`${date.date}|${slot}`)||'':''}
-function baseline(date,slot,weekday){
- const rule=get('fixed',[]).find(r=>Number(r.weekday)===weekday&&Number(r.slot)===slot);
- if(rule)return rule.doctor;
- if(source.has(`${date}|${slot}`))return source.get(`${date}|${slot}`);
- if(slot>=14)return (seed.cinderelas||[]).find(x=>x.weekday===weekday&&x.slot===slot)?.doctor||'';
- return '';
-}
+function baseline(date,slot){return plannedDoctor(seed,storage,date,slot);}
 function storageKey(){return `edits:${document.querySelector('#year').value}:${monthEl.value}:${document.querySelector('#half').value}`}
 function settings(){for(const id of ['fixed-doctor','absence-doctor'])fillDoctorSelect(document.querySelector(`#${id}`));
  const container=document.querySelector('#settings-list');container.replaceChildren();
  for(const [type,items,describe] of [['fixed',get('fixed',[]),item=>`${WEEKDAYS[item.weekday]} · ${slotNames[item.slot]} · ${label(item.doctor)}`],['absences',get('absences',[]),item=>`${label(item.doctor)} · ${item.start} a ${item.end}`]]){
   const heading=document.createElement('h3');heading.textContent=type==='fixed'?'Plantões fixos cadastrados':'Férias e afastamentos';container.append(heading);
   if(!items.length){const empty=document.createElement('p');empty.className='notice';empty.textContent='Nenhum registro.';container.append(empty)}
-  items.forEach((item,index)=>{const entry=document.createElement('span');entry.className='entry';entry.append(document.createTextNode(describe(item)));const remove=document.createElement('button');remove.type='button';remove.textContent='Remover';remove.addEventListener('click',()=>{items.splice(index,1);put(type,items);settings();render()});entry.append(remove);container.append(entry)})
+  items.forEach((item,index)=>{const entry=document.createElement('span');entry.className='entry';entry.append(document.createTextNode(describe(item)));const remove=document.createElement('button');remove.type='button';remove.textContent='Remover';remove.addEventListener('click',()=>{items.splice(index,1);put(type,items);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});entry.append(remove);container.append(entry)})
  }
 }
 function renderVisitors(){
@@ -64,18 +59,21 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  for(const seg of segments(seed,storage,day.date,slot)){for(const leave of vacationConflicts(storage,seg.doctor,day.date,slot)){td.classList.add('vacation-conflict');const warning=document.createElement('small');warning.className='vacation-warning';warning.textContent=vacationMessage(leave);td.append(warning);alerts++;}}
  row.append(td)}body.append(row)});
+ for(const select of document.querySelectorAll('#body select'))select.classList.add(affiliationClass(select.value));
  renderVisitors();
  document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento`;
 }
-document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),doctor])]);event.currentTarget.reset();settings();render()});
-document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();render()});
-document.querySelector('#absence-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),item={doctor:String(data.get('doctor')),start:String(data.get('start')),end:String(data.get('end'))};if(!item.doctor||item.start>item.end)return alert('Confira médico e período.');put('absences',[...get('absences',[]),item]);event.currentTarget.reset();settings();render()});
+document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
+document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
+document.querySelector('#absence-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),item={doctor:String(data.get('doctor')),start:String(data.get('start')),end:String(data.get('end'))};if(!item.doctor||item.start>item.end)return alert('Confira médico e período.');put('absences',[...get('absences',[]),item]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#generate').addEventListener('click',render);
 document.querySelector('#reset').addEventListener('click',()=>{if(confirm('Restaurar os dados iniciais desta quinzena? No modo online, use Salvar online para confirmar.')){storage.removeItem(`rt-upa:${storageKey()}`);render()}});
 document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 settings();render();
 mountOrganizer(storage,seed);
 mountScheduleView(storage,seed);
+mountRoster(storage,seed);
+document.querySelector('#fixed-form').hidden=true;
 document.addEventListener("rt-schedule-changed",render);
 document.addEventListener("rt-data-restored",()=>{settings();render();});
 mountPush();

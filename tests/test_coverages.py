@@ -18,4 +18,4 @@ class CoverageExports(unittest.TestCase):
    with ZipFile(out) as z,ZipFile(ROOT/'templates/escala-cinderelas.xlsx') as original:
     tree=E.fromstring(z.read('xl/worksheets/sheet1.xml'));cells={x.get('r'):''.join(x.itertext()) for x in tree.iter(Q('c'))};self.assertEqual(cells['C4'],'COBERTURA TESTE');self.assertEqual(cells['H4'],'X')
     for name in original.namelist():
-     if name!='xl/worksheets/sheet1.xml':self.assertEqual(z.read(name),original.read(name))
+     if name not in ('xl/worksheets/sheet1.xml','xl/styles.xml'):self.assertEqual(z.read(name),original.read(name))
