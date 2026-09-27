@@ -16,7 +16,7 @@ export async function connectStore() {
   const response = await fetch('/api/state');
   if (!response.ok) throw new Error('Não foi possível carregar a escala salva. Recarregue para tentar novamente.');
   const state = await response.json();
-  let revision = state.revision, dirty = false, saving = false, generation = 0;
+  let revision = state.revision, dirty = false, saving = false, generation = 0, autoTimer;
   const banner = document.createElement('div');
   banner.className = 'toolbar account-bar';
   banner.style.marginBottom = '16px';
@@ -27,11 +27,12 @@ export async function connectStore() {
   const logout = document.createElement('button'); logout.textContent = 'Sair'; logout.className = 'secondary';
   banner.append(account, status, save, reload, logout);
   document.querySelector('main').prepend(banner);
-  const store = new MemoryStore(state.items, () => { dirty = true; generation++; save.disabled = saving; status.textContent = 'Alterações ainda não salvas'; });
+  const store = new MemoryStore(state.items, () => { dirty = true; generation++; save.disabled = saving; status.textContent = 'Salvando automaticamente…';clearTimeout(autoTimer);autoTimer=setTimeout(()=>{if(!saving)save.click();},900); });
   status.textContent = revision ? 'Dados carregados da sua conta' : 'Primeiro acesso · nenhuma alteração salva';
   document.querySelector('.badge').textContent = 'Acesso individual';
-  document.querySelector('main > .notice').textContent = 'Use Salvar online após editar. No outro dispositivo, use Atualizar dados. Revise os plantões e as vagas no Excel antes de enviar a escala.';
+  document.querySelector('main > .notice').textContent = 'As alterações são salvas automaticamente. Outros dispositivos atualizam em poucos segundos. Revise os plantões e as vagas no Excel antes de enviar a escala.';
   save.addEventListener('click', async () => {
+    if(saving||!dirty)return;clearTimeout(autoTimer);
     saving = true; save.disabled = true; logout.disabled = true; reload.disabled = true;
     const sentGeneration = generation;
     status.textContent = 'Salvando…';
@@ -43,7 +44,7 @@ export async function connectStore() {
       status.textContent = dirty ? 'Há novas alterações para salvar' : 'Salvo online';
     } catch (error) {
       status.textContent = error.message + ' Baixar backup preserva suas alterações. Se a sessão expirou, entre novamente em outra aba e tente salvar.';
-    } finally { saving = false; save.disabled = !dirty; logout.disabled = false; reload.disabled = false; }
+    } finally { saving = false; save.disabled = !dirty; logout.disabled = false; reload.disabled = false; if(dirty&&generation!==sentGeneration)autoTimer=setTimeout(()=>save.click(),900); }
   });
   reload.addEventListener('click', () => { if (!dirty || confirm('Há alterações não salvas. Descartá-las e carregar os dados online?')) location.reload(); });
   logout.addEventListener('click', async () => {
@@ -55,5 +56,10 @@ export async function connectStore() {
     } catch (error) { status.textContent = error.message; }
   });
   window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+  setInterval(async()=>{
+    if(dirty||saving||document.hidden||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+    const before=generation;
+    try{const r=await fetch('/api/state');if(!r.ok)return;const latest=await r.json();if(!dirty&&!saving&&generation===before&&latest.revision!==revision){store.items=new Map(Object.entries(latest.items));revision=latest.revision;status.textContent='Atualizado de outro dispositivo';document.dispatchEvent(new Event('rt-data-restored'));}}catch{}
+  },5000);
   return store;
 }

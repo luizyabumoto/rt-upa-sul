@@ -120,6 +120,8 @@ def export(year, month, half, backup, template, output):
                 rule = next((r for r in fixed if int(r['weekday']) == (date.weekday()+1)%7 and int(r['slot']) == slot), None)
                 baseline = (rule or {}).get('doctor') or seed_shifts.get((date_text, slot), '')
                 selected = edits.get(f'{date_text}|{slot}', baseline)
+                cover = next((c for c in backup.get('coverages',[]) if c.get('confirmed') and c['date']==date_text and c['slot']==slot),None)
+                if cover: selected=cover['doctor']
                 # Preserva indicador de vaga; exige revisão antes de uso oficial.
                 set_cell(sheet_data, f'{column}{heading+2+slot}', selected or 'VAGO')
                 schedule[(date_text, slot)] = selected
@@ -136,6 +138,30 @@ def export(year, month, half, backup, template, output):
             for member in original.infolist():
                 target.writestr(member, replacement if member.filename == 'xl/worksheets/sheet1.xml' else original.read(member.filename))
     return schedule
+
+
+def export_cinderela(date_text, backup, output):
+    day=dt.date.fromisoformat(date_text)
+    monday=day-dt.timedelta(days=day.weekday())
+    template=ROOT/'templates'/'escala-cinderelas.xlsx'
+    with ZipFile(template) as original:
+        tree=etree.fromstring(original.read('xl/worksheets/sheet1.xml'))
+        sheet_data=tree.find(Q('sheetData'))
+        set_cell(sheet_data,'A2',f'CINDERELAS: {monday:%d/%m/%Y} a {monday+dt.timedelta(days=6):%d/%m/%Y}')
+        for i,col in enumerate('CDEFGHI'):
+            day=monday+dt.timedelta(days=i);date=day.isoformat();weekday=(day.weekday()+1)%7
+            set_cell(sheet_data,f'{col}3',f'{WEEKDAYS[i]}\n{day:%d/%m}')
+            edits=backup.get(f'edits:{day.year}:{day.month}:{1 if day.day<=15 else 2}',{})
+            for slot,row in [(14,4),(15,5)]:
+                rule=next((x for x in backup.get('fixed',[]) if x['weekday']==weekday and x['slot']==slot),None)
+                seed=next((x for x in SEED.get('cinderelas',[]) if x['weekday']==weekday and x['slot']==slot),{})
+                doctor=edits.get(f'{date}|{slot}',(rule if rule is not None else seed).get('doctor',''))
+                cover=next((x for x in backup.get('coverages',[]) if x.get('confirmed') and x['date']==date and x['slot']==slot),None)
+                if cover:doctor=cover['doctor']
+                set_cell(sheet_data,f'{col}{row}',doctor or ('X' if weekday in (0,6) else 'VAGO'))
+        replacement=etree.tostring(tree,encoding='utf-8',xml_declaration=True)
+        with ZipFile(output,'w') as target:
+            for member in original.infolist():target.writestr(member,replacement if member.filename=='xl/worksheets/sheet1.xml' else original.read(member.filename))
 
 
 if __name__ == '__main__':

@@ -11,11 +11,11 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse, quote
 
-from export_excel import export, DEFAULT_TEMPLATE
+from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -54,7 +54,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(coverages|organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -63,20 +63,44 @@ def validate_items(items):
         except (ValueError, TypeError):
             raise ApiError(400, 'Backup inválido.')
         name = key[7:]
-        if name == 'organizer':
+        if name == 'coverages':
+            if not isinstance(parsed,list) or len(parsed)>2000:
+                raise ApiError(400,'Lista de coberturas inválida.')
+            seen=set()
+            for item in parsed:
+                if not isinstance(item,dict) or set(item)!={'id','taskId','date','slot','start','end','doctor','original','confirmed'}:
+                    raise ApiError(400,'Cobertura inválida.')
+                if any(not isinstance(item.get(k),str) or len(item[k])>500 for k in ('id','taskId','date','doctor','original')) or not item['id'] or item['id'] in seen or not item['doctor']:
+                    raise ApiError(400,'Dados de cobertura inválidos.')
+                seen.add(item['id'])
+                from datetime import date
+                try: date.fromisoformat(item['date'])
+                except ValueError: raise ApiError(400,'Data de cobertura inválida.')
+                slot=item['slot']
+                if type(slot) is not int or not 0<=slot<=15 or type(item['confirmed']) is not bool:
+                    raise ApiError(400,'Posto inválido.')
+                a,b=(12,18) if slot==14 else (18,24) if slot==15 else (7,19) if slot<7 else (19,31)
+                if item['start']!=a or item['end']!=b:
+                    raise ApiError(400,'A cobertura deve corresponder ao horário completo do posto.')
+            active=[x for x in parsed if x['confirmed']]
+            if len({(x['date'],x['slot']) for x in active})!=len(active):
+                raise ApiError(400,'Há coberturas confirmadas duplicadas no mesmo posto.')
+        elif name == 'organizer':
             if not isinstance(parsed, list) or len(parsed) > 2000:
                 raise ApiError(400, 'Lista de anotações inválida.')
             seen = set()
             for item in parsed:
-                if not isinstance(item, dict) or set(item) != {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}:
+                if not isinstance(item, dict) or not {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}.issubset(item) or isinstance(item,dict) and set(item)-{'id','kind','title','body','date','reminder','shift','status','doctor','cover','type','needed'}:
                     raise ApiError(400, 'Anotação inválida.')
+                if item.get('type','Cobertura') not in ('Cobertura','Troca de plantão','Atestado / afastamento','Outro') or type(item.get('needed',1)) is not int or not 1<=item.get('needed',1)<=20:
+                    raise ApiError(400,'Tipo ou quantidade de cobertura inválidos.')
                 limits = {'id': 100, 'title': 160, 'body': 10000, 'doctor': 500, 'cover': 500}
                 if any(not isinstance(item.get(k), str) or len(item[k]) > limit for k, limit in limits.items()):
                     raise ApiError(400, 'Texto de anotação inválido.')
                 if not item['id'] or item['id'] in seen or not item['title'].strip():
                     raise ApiError(400, 'Identificação de anotação inválida.')
                 seen.add(item['id'])
-                if item['kind'] not in ('task', 'note') or item['status'] not in ('Precisa de cobertura', 'Aguardando confirmação', 'Em acompanhamento', 'Resolvido') or item['shift'] not in ('', 'Diurno', 'Noturno', 'Visitador'):
+                if item['kind'] not in ('task', 'note') or item['status'] not in ('Precisa de cobertura', 'Aguardando confirmação', 'Em acompanhamento', 'Resolvido') or item['shift'] not in ('', 'Diurno', 'Noturno', 'Visitador', 'Cinderela'):
                     raise ApiError(400, 'Situação de anotação inválida.')
                 from datetime import date
                 for field in ('date', 'reminder'):
@@ -96,7 +120,7 @@ def validate_items(items):
                 if name == 'doctors':
                     valid = isinstance(item, str) and len(item) <= 500
                 elif name == 'fixed':
-                    valid = isinstance(item, dict) and type(item.get('weekday')) is int and 0 <= item['weekday'] <= 6 and type(item.get('slot')) is int and 0 <= item['slot'] < 14 and isinstance(item.get('doctor'), str) and len(item['doctor']) <= 500
+                    valid = isinstance(item, dict) and type(item.get('weekday')) is int and 0 <= item['weekday'] <= 6 and type(item.get('slot')) is int and 0 <= item['slot'] < 16 and isinstance(item.get('doctor'), str) and len(item['doctor']) <= 500
                 else:
                     valid = isinstance(item, dict) and isinstance(item.get('doctor'), str) and all(isinstance(item.get(k), str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', item[k]) for k in ('start', 'end')) and item['start'] <= item['end']
                 if not valid:
@@ -104,7 +128,7 @@ def validate_items(items):
         else:
             if not isinstance(parsed, dict) or len(parsed) > 500:
                 raise ApiError(400, 'Grade inválida.')
-            pattern = r'[0-6]\|[01]' if name == 'visits:weekly' else r'\d{4}-\d{2}-\d{2}\|(?:[0-9]|1[0-3])'
+            pattern = r'[0-6]\|[01]' if name == 'visits:weekly' else r'\d{4}-\d{2}-\d{2}\|(?:[0-9]|1[0-5])'
             if any(not re.fullmatch(pattern, k) or not isinstance(v, str) or len(v) > 500 for k, v in parsed.items()):
                 raise ApiError(400, 'Posição inválida na grade.')
         result[name] = parsed
@@ -174,6 +198,8 @@ def app(environ, start_response):
             if path == '/icon.png':
                 return respond(200, base64.b64decode((ROOT / 'icon.png.b64').read_text()), 'image/png')
             return respond(200, (ROOT / path.lstrip('/')).read_bytes(), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json')
+        if path == '/src/dark.css' and method == 'GET':
+            return respond(200,(ROOT/'src/dark.css').read_bytes(),'text/css; charset=utf-8')
         if path == '/login' and method == 'GET':
             return respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
         if path == '/src/login.js' and method == 'GET':
@@ -243,6 +269,14 @@ def app(environ, start_response):
                 raise ApiError(400, 'Versão inválida.')
             result = remote('/rest/v1/rpc/save_rt_state', 'POST', {'new_items': payload['items'], 'expected_revision': revision}, token)
             return respond(200, {'revision': result})
+        if path == '/api/export-cinderela' and method == 'POST':
+            data=validate_items(payload.get('items'))
+            with tempfile.TemporaryDirectory(prefix='rt-cinderela-') as temp:
+                target=Path(temp)/'cinderelas.xlsx'
+                export_cinderela(payload.get('date',''),data,target)
+                body=target.read_bytes()
+            extra.append(('Content-Disposition','attachment; filename="ESCALA_CINDERELAS.xlsx"'))
+            return respond(200,body,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if path == '/api/export' and method == 'POST':
             data = validate_items(payload.get('items'))
             year, month, half = (payload.get(k) for k in ('year', 'month', 'half'))

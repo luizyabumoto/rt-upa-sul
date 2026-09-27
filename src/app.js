@@ -1,14 +1,16 @@
+import {mountScheduleView} from './schedule-view.js';
+import {segments,baseDoctor} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
 try { storage = await connectStore(); } catch(error) { document.querySelector('main').textContent = error.message; throw error; }
-const seedResponse = await fetch('/src/seed.json');
+const seedResponse = await fetch('/src/seed.json',{cache:'no-store'});
 if (!seedResponse.ok) { document.querySelector('main').textContent = 'Não foi possível carregar a escala. Entre novamente e recarregue a página.'; throw new Error('Seed indisponível'); }
 const seed = await seedResponse.json();
 const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const slotNames=['Diurno · Clínico 1','Diurno · Clínico 2','Diurno · Clínico 3','Diurno · Clínico 4','Diurno · Pediatria 1','Diurno · Pediatria 2','Diurno · Box','Noturno · Clínico 1','Noturno · Clínico 2','Noturno · Clínico 3','Noturno · Clínico 4','Noturno · Pediatria 1','Noturno · Pediatria 2','Noturno · Box'];
+const slotNames=['Diurno · Clínico 1','Diurno · Clínico 2','Diurno · Clínico 3','Diurno · Clínico 4','Diurno · Pediatria 1','Diurno · Pediatria 2','Diurno · Box','Noturno · Clínico 1','Noturno · Clínico 2','Noturno · Clínico 3','Noturno · Clínico 4','Noturno · Pediatria 1','Noturno · Pediatria 2','Noturno · Box','Cinderela · 12h–18h','Cinderela · 18h–00h'];
 const source=new Map(seed.assignments.map(a=>[`${a.date}|${a.slot}`,a.doctor]));
 const get=(key,fallback)=>{try{return JSON.parse(storage.getItem(`rt-upa:${key}`))??fallback}catch{return fallback}};
 const put=(key,value)=>storage.setItem(`rt-upa:${key}`,JSON.stringify(value));
@@ -23,6 +25,7 @@ function baseline(date,slot,weekday){
  const rule=get('fixed',[]).find(r=>Number(r.weekday)===weekday&&Number(r.slot)===slot);
  if(rule)return rule.doctor;
  if(source.has(`${date}|${slot}`))return source.get(`${date}|${slot}`);
+ if(slot>=14)return (seed.cinderelas||[]).find(x=>x.weekday===weekday&&x.slot===slot)?.doctor||'';
  return '';
 }
 function storageKey(){return `edits:${document.querySelector('#year').value}:${monthEl.value}:${document.querySelector('#half').value}`}
@@ -53,11 +56,12 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  document.querySelector('#summary').innerHTML=`<span><b>${first} a ${last} de ${months[days[0].month-1]} de ${days[0].year}</b></span><span>${days.length} dias</span><span id="count"></span><span id="alerts"></span>`;
  document.querySelector('#head').innerHTML=`<tr><th>Posto / turno</th>${days.map(d=>`<th>${d.weekdayName.toUpperCase()}<br>${String(d.day).padStart(2,'0')}/${String(d.month).padStart(2,'0')}</th>`).join('')}</tr>`;
  const body=document.querySelector('#body');body.replaceChildren();let changed=0,alerts=0;
- slotNames.forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name;row.append(title);
+ slotNames.slice(0,14).forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name+(slot<7?" · 07h–19h · 12h":" · 19h–07h · 12h");row.append(title);
  for(const day of days){const td=document.createElement('td');const key=`${day.date}|${slot}`;const base=baseline(day.date,slot,day.weekday);const selected=Object.hasOwn(edits,key)?edits[key]:base;if(selected!==base){td.classList.add('changed');changed++}if(!selected)td.classList.add('empty');const select=document.createElement('select');select.setAttribute('aria-label',`${name} em ${day.date}`);
  const options=selected&&!doctors().includes(selected)?[...doctors(),selected]:doctors();for(const doctor of options)select.add(new Option(label(doctor),doctor));select.value=selected;
  select.addEventListener('change',()=>{const update=get(storageKey(),{});if(select.value===base)delete update[key];else update[key]=select.value;put(storageKey(),update);render()});td.append(select);
- if(selected&&absences.some(a=>a.doctor===selected&&a.start<=day.date&&day.date<=a.end)){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
+ const covers=segments(seed,storage,day.date,slot).filter(x=>x.coverage);if(covers.length){if(selected===base)changed++;select.value=covers[0].doctor;select.disabled=true;const note=document.createElement('small');note.textContent='Cobertura: '+covers.map(x=>x.doctor.replaceAll('\n',' · ')).join(' / ');td.append(note);td.classList.add('changed');}
+ if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  row.append(td)}body.append(row)});
  renderVisitors();
  document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento`;
@@ -69,10 +73,14 @@ document.querySelector('#generate').addEventListener('click',render);
 document.querySelector('#reset').addEventListener('click',()=>{if(confirm('Restaurar os dados iniciais desta quinzena? No modo online, use Salvar online para confirmar.')){storage.removeItem(`rt-upa:${storageKey()}`);render()}});
 document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 settings();render();
-mountOrganizer(storage);
+mountOrganizer(storage,seed);
+mountScheduleView(storage,seed);
+document.addEventListener("rt-schedule-changed",render);
+document.addEventListener("rt-data-restored",()=>{settings();render();});
 mountPush();
 
 document.querySelector('#restore').addEventListener('click',()=>document.querySelector('#restore-file').click());
 document.querySelector('#restore-file').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.version!==1||!data.items||typeof data.items!=='object'||Object.keys(data.items).some(key=>!key.startsWith('rt-upa:')||typeof data.items[key]!=='string'))throw new Error('Formato de backup inválido');if(!confirm('Restaurar este backup? Os registros com a mesma chave serão substituídos. No modo online, use Salvar online para confirmar.'))return;for(const [key,value] of Object.entries(data.items))storage.setItem(key,value);settings();render();document.dispatchEvent(new Event('rt-data-restored'))}catch(error){alert(`Não foi possível restaurar: ${error.message}`)}finally{event.target.value=''}});
 
 document.querySelector('#excel').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:Number(document.querySelector('#year').value),month:Number(monthEl.value),half:Number(document.querySelector('#half').value),items})});if(!response.ok)throw new Error(response.status===501?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':await response.text());const blob=await response.blob();const match=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=match?.[1]||'escala-medica.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Exportar Excel oficial'}});
+
