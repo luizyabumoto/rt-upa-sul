@@ -1,3 +1,4 @@
+import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
@@ -75,6 +76,7 @@ mountOrganizer(storage,seed);
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);
+mountQuickView(storage,seed);
 document.querySelector('#fixed-form').hidden=true;
 document.addEventListener("rt-schedule-changed",render);
 document.addEventListener("rt-data-restored",()=>{settings();render();});
