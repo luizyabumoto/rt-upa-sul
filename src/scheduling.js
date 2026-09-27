@@ -31,3 +31,19 @@ export function plannedDoctor(seed,storage,date,slot){
 export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;return Object.hasOwn(edits,key)?edits[key]:plannedDoctor(seed,storage,date,slot);}
 export function segments(seed,storage,date,slot){const [start,end]=bounds(slot),base=baseDoctor(seed,storage,date,slot);const covers=parse(storage,'coverages',[]).filter(x=>x.confirmed&&x.date===date&&x.slot===slot).sort((a,b)=>a.start-b.start);const result=[];let cursor=start;for(const c of covers){if(c.start>cursor)result.push({start:cursor,end:c.start,doctor:base});result.push({...c,coverage:true});cursor=c.end;}if(cursor<end)result.push({start:cursor,end,doctor:base});return result;}
 export function validateCoverage(item,existing){const [start,end]=bounds(item.slot);if(!Number.isInteger(item.slot)||item.slot<0||item.slot>15||!item.date||!item.doctor||!Number.isInteger(item.start)||!Number.isInteger(item.end)||item.start<start||item.end>end||item.start>=item.end)throw new Error('Confira data, posto, médico e intervalo da cobertura.');if(existing.some(x=>x.confirmed&&x.id!==item.id&&x.date===item.date&&x.slot===item.slot&&x.start<item.end&&item.start<x.end))throw new Error('Já existe uma cobertura confirmada nesse intervalo. Desfaça a anterior para substituí-la.');}
+
+// Use calendar-day offsets, independent of the device timezone, including overnight hours.
+export function overlapIndex(seed,storage,dates){
+ const allDates=new Set(),byDoctor=new Map(),result=new Map();
+ for(const date of dates)for(const offset of [-1,0,1])allDates.add(new Date(Date.parse(date+'T00:00:00Z')+offset*86400000).toISOString().slice(0,10));
+ for(const date of allDates)for(let slot=0;slot<16;slot++)for(const segment of segments(seed,storage,date,slot)){
+  const identity=doctorIdentity(segment.doctor);if(!identity)continue;
+  const midnight=Date.parse(date+'T00:00:00Z')/3600000;
+  const item={date,slot,doctor:segment.doctor,start:segment.start,end:segment.end,from:midnight+segment.start,to:midnight+segment.end};
+  if(!byDoctor.has(identity))byDoctor.set(identity,[]);byDoctor.get(identity).push(item);
+ }
+ const add=(a,b)=>{const key=`${a.date}|${a.slot}`;if(!result.has(key))result.set(key,[]);const found=result.get(key);if(!found.some(x=>x.date===b.date&&x.slot===b.slot&&doctorIdentity(x.doctor)===doctorIdentity(b.doctor)))found.push(b);};
+ for(const entries of byDoctor.values()){entries.sort((a,b)=>a.from-b.from);for(let i=0;i<entries.length;i++)for(let j=i+1;j<entries.length&&entries[j].from<entries[i].to;j++){const a=entries[i],b=entries[j];if(a.date===b.date&&a.slot===b.slot)continue;if(a.from<b.to&&b.from<a.to){add(a,b);add(b,a);}}}
+ return result;
+}
+export function overlapMessage(conflict){return `⚠ HORÁRIO DUPLICADO: ${conflict.doctor.split(/CRM/i)[0].trim()} também está em ${slots[conflict.slot]} · ${conflict.date.split('-').reverse().join('/')} · ${hour(conflict.start)}–${hour(conflict.end)}.`;}

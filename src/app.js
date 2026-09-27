@@ -4,7 +4,7 @@ import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage} from './scheduling.js';
+import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
@@ -54,7 +54,7 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  const edits=get(storageKey(),{}),absences=get('absences',[]),first=days[0].day,last=days.at(-1).day;
  document.querySelector('#summary').innerHTML=`<span><b>${first} a ${last} de ${months[days[0].month-1]} de ${days[0].year}</b></span><span>${days.length} dias</span><span id="count"></span><span id="alerts"></span>`;
  document.querySelector('#head').innerHTML=`<tr><th>Posto / turno</th>${days.map(d=>`<th>${d.weekdayName.toUpperCase()}<br>${String(d.day).padStart(2,'0')}/${String(d.month).padStart(2,'0')}</th>`).join('')}</tr>`;
- const body=document.querySelector('#body');body.replaceChildren();let changed=0,alerts=0;
+ const overlaps=overlapIndex(seed,storage,days.map(d=>d.date));const body=document.querySelector('#body');body.replaceChildren();let changed=0,alerts=0,duplicatePosts=0;
  slotNames.slice(0,14).forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name+(slot<7?" · 07h–19h · 12h":" · 19h–07h · 12h");row.append(title);
  for(const day of days){const td=document.createElement('td');const key=`${day.date}|${slot}`;const base=baseline(day.date,slot,day.weekday);const selected=Object.hasOwn(edits,key)?edits[key]:base;if(selected!==base){td.classList.add('changed');changed++}if(!selected)td.classList.add('empty');const select=document.createElement('select');select.setAttribute('aria-label',`${name} em ${day.date}`);
  const options=selected&&!doctors().includes(selected)?[...doctors(),selected]:doctors();for(const doctor of options)select.add(new Option((vacationConflicts(storage,doctor,day.date,slot).length?'⚠ EM FÉRIAS · ':'')+label(doctor),doctor));select.value=selected;
@@ -62,10 +62,11 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  const covers=segments(seed,storage,day.date,slot).filter(x=>x.coverage);if(covers.length){if(selected===base)changed++;select.value=covers[0].doctor;select.disabled=true;const note=document.createElement('small');note.textContent='Cobertura: '+covers.map(x=>x.doctor.replaceAll('\n',' · ')).join(' / ');td.append(note);td.classList.add('changed');}
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  for(const seg of segments(seed,storage,day.date,slot)){for(const leave of vacationConflicts(storage,seg.doctor,day.date,slot)){td.classList.add('vacation-conflict');const warning=document.createElement('small');warning.className='vacation-warning';warning.textContent=vacationMessage(leave);td.append(warning);alerts++;}}
+ const collisions=overlaps.get(`${day.date}|${slot}`)||[];if(collisions.length){duplicatePosts++;td.classList.add('overlap-conflict');for(const collision of collisions){const warning=document.createElement('small');warning.className='overlap-warning';warning.textContent=overlapMessage(collision);td.append(warning);}}
  row.append(td)}body.append(row)});
  for(const select of document.querySelectorAll('#body select')){select.classList.add(affiliationClass(select.value));doctorSearchButton(select);}
  renderVisitors();
- document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento`;
+ document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento · ${duplicatePosts} postos com choque de horário`;
 }
 document.querySelector('#doctor-form').elements.name.addEventListener('input',event=>event.target.setCustomValidity(''));
 document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);if(!String(data.get('name')).trim()){event.currentTarget.elements.name.setCustomValidity('Informe o nome do médico.');event.currentTarget.elements.name.reportValidity();return;}const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
