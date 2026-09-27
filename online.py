@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
 
 
 class ApiError(Exception):
@@ -121,14 +121,15 @@ def validate_items(items):
             seen=set()
             from datetime import date
             for item in parsed:
-                if not isinstance(item,dict) or set(item)!={'id','start','weekday','slot','doctor'} or not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=100 or type(item.get('weekday')) is not int or not 0<=item['weekday']<=6 or type(item.get('slot')) is not int or not 0<=item['slot']<16 or not isinstance(item.get('doctor'),str) or len(item['doctor'])>500:
+                if not isinstance(item,dict) or not {'id','start','weekday','slot','doctor'}.issubset(item) or set(item)-{'id','start','weekday','slot','doctor','repeatExtra'} or not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=100 or type(item.get('weekday')) is not int or not 0<=item['weekday']<=6 or type(item.get('slot')) is not int or not 0<=item['slot']<16 or not isinstance(item.get('doctor'),str) or len(item['doctor'])>500:
                     raise ApiError(400,'Dia fixo inválido.')
                 try:
                     if date.fromisoformat(item['start']).isoformat()!=item['start']:raise ValueError()
                 except (ValueError,TypeError):raise ApiError(400,'Data de vigência inválida.')
                 key=(item['start'],item['weekday'],item['slot'])
                 if key in seen:raise ApiError(400,'Dois padrões para o mesmo posto e data.')
-                if 'EXTRA' in item['doctor'].upper():raise ApiError(400,'Extras devem ser registrados por data.')
+                if 'repeatExtra' in item and type(item['repeatExtra']) is not bool:raise ApiError(400,'Repetição inválida.')
+                if 'EXTRA' in item['doctor'].upper() and item.get('repeatExtra') is not True:raise ApiError(400,'Confirme a repetição semanal do extra.')
                 seen.add(key)
         elif name in ('doctors', 'fixed', 'absences'):
             if not isinstance(parsed, list) or len(parsed) > 2000:

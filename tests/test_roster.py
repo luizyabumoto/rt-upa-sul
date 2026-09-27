@@ -11,6 +11,13 @@ class RosterTests(unittest.TestCase):
   for changes in [dict(start='2026-02-30'),dict(weekday=7),dict(slot=16),dict(doctor='TESTE - EXTRA SMS')]:
    with self.assertRaises(ApiError):validate_items({'rt-upa:roster':json.dumps([{**rule,**changes}])})
   with self.assertRaises(ApiError):validate_items({'rt-upa:roster':json.dumps([rule,rule])})
+ def test_explicit_extra_recurrence(self):
+  rule=dict(id='extra',start='2026-10-01',weekday=3,slot=0,doctor='TESTE CRM 123 - EXTRA SMS',repeatExtra=True)
+  validate_items({'rt-upa:roster':json.dumps([rule])})
+  self.assertEqual(planned_doctor('2026-10-07',0,{'roster':[rule]}),rule['doctor'])
+  self.assertNotEqual(planned_doctor('2026-09-30',0,{'roster':[rule]}),rule['doctor'])
+  for value in [False,'true',1,None]:
+   with self.assertRaises(ApiError):validate_items({'rt-upa:roster':json.dumps([{**rule,'repeatExtra':value}])})
  def test_history_and_export_colors(self):
   rules=[dict(id='a',start='2026-10-01',weekday=2,slot=0,doctor='TESTE CRM 1 - COAPH')]
   self.assertIn('DHYEILLEN',planned_doctor('2026-09-28',1,{'roster':rules}))

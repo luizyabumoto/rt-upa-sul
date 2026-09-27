@@ -1,3 +1,4 @@
+import {doctorSearchButton} from './doctor-picker.js';
 import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
@@ -61,11 +62,12 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  for(const seg of segments(seed,storage,day.date,slot)){for(const leave of vacationConflicts(storage,seg.doctor,day.date,slot)){td.classList.add('vacation-conflict');const warning=document.createElement('small');warning.className='vacation-warning';warning.textContent=vacationMessage(leave);td.append(warning);alerts++;}}
  row.append(td)}body.append(row)});
- for(const select of document.querySelectorAll('#body select'))select.classList.add(affiliationClass(select.value));
+ for(const select of document.querySelectorAll('#body select')){select.classList.add(affiliationClass(select.value));doctorSearchButton(select);}
  renderVisitors();
  document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento`;
 }
-document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
+document.querySelector('#doctor-form').elements.name.addEventListener('input',event=>event.target.setCustomValidity(''));
+document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);if(!String(data.get('name')).trim()){event.currentTarget.elements.name.setCustomValidity('Informe o nome do médico.');event.currentTarget.elements.name.reportValidity();return;}const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#absence-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),item={doctor:String(data.get('doctor')),start:String(data.get('start')),end:String(data.get('end'))};if(!item.doctor||item.start>item.end)return alert('Confira médico e período.');put('absences',[...get('absences',[]),item]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#generate').addEventListener('click',render);
