@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {periodoDemanda, janelas, analisar} from '../src/demand.js';
-import {plantoesDoPeriodo, cruzamento} from '../src/production.js';
+import {periodoDemanda, janelas, analisar, medicosPorHora, pressaoPorHora} from '../src/demand.js';
+import {plantoesDoPeriodo, cruzamento, periodoComparado, variacao} from '../src/production.js';
 
 const em = local => new Date(`${local}:00-04:00`);
 
@@ -52,4 +52,34 @@ test('escala × produção: escalado com e sem consulta e consultas fora da esca
  assert.deepEqual([r['ANA LIMA'].escalados, r['ANA LIMA'].comConsulta, r['ANA LIMA'].semConsulta.length, r['ANA LIMA'].consultasEscalado], [2, 1, 1, 20]);
  assert.deepEqual([r['MARIA CLARA TRETTEL'].consultasEscalado, r['MARIA CLARA TRETTEL'].consultasFora], [27, 0]);
  assert.deepEqual([r['LUCAS MOTA'].escalados, r['LUCAS MOTA'].consultasFora], [0, 33]);
+});
+
+test('médicos e consultas por hora, e consultas por médico', () => {
+ // Clínico das 07h às 19h nos dias 01 e 02; o dia 03 não tem escala cadastrada.
+ const partes = (data, slot) => slot === 0 && data !== '2026-10-03' ? [{doctor: 'ANA\nCRM 1', start: 7, end: 19}] : [];
+ const escala = medicosPorHora(['2026-10-01', '2026-10-02', '2026-10-03'], partes);
+ assert.deepEqual(escala.dias.sort(), ['2026-10-01', '2026-10-02']);   // dia 03 sem escala fica de fora
+ assert.equal(escala.media[8], 1);                                     // 08h: 1 médico nos dois dias
+ assert.equal(escala.media[3], 0);                                     // 03h: ninguém
+ const horas = {'2026-10-01T08': {adulto: 10, pediatria: 0}, '2026-10-02T08': {adulto: 20, pediatria: 0}, '2026-10-03T08': {adulto: 99, pediatria: 0}};
+ const p = pressaoPorHora(horas, escala);
+ assert.equal(p[8].consultas, 15);            // média de 10 e 20; o dia 03 não conta
+ assert.equal(p[8].medicos, 1);
+ assert.equal(p[8].porMedico, 15);
+});
+
+test('noturno conta nas horas do dia seguinte depois da meia-noite', () => {
+ const partes = (data, slot) => slot === 7 ? [{doctor: 'BIA\nCRM 2', start: 19, end: 31}] : [];
+ const escala = medicosPorHora(['2026-10-01', '2026-10-02'], partes);
+ assert.deepEqual(escala.dias.sort(), ['2026-10-01', '2026-10-02']);
+ assert.equal(escala.media[20], 1);     // 20h: um plantão noturno em cada dia
+ assert.equal(escala.media[2], 0.5);    // 02h: só a madrugada do plantão do dia 01 caiu dentro da lista
+});
+
+test('comparação: período anterior e mesmo período do ano passado', () => {
+ assert.deepEqual(periodoComparado('2026-09-08T07:00', '2026-09-15T07:00', 'anterior'), {inicio: '2026-09-01T07:00', fim: '2026-09-08T07:00'});
+ assert.deepEqual(periodoComparado('2026-09-01T00:00', '2026-10-01T00:00', 'ano'), {inicio: '2025-09-01T00:00', fim: '2025-10-01T00:00'});
+ assert.equal(variacao(120, 100), '+20%');
+ assert.equal(variacao(80, 100), '-20%');
+ assert.equal(variacao(10, 0), 'novo');
 });

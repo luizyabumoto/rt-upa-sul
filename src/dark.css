@@ -118,3 +118,24 @@ header small{margin-left:46px;margin-top:2px;letter-spacing:.02em}
 .trocas-alerta h3{margin:0 0 10px;font-size:15px;color:#ffd9ad}.trocas-alerta .troca{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #3a2c1c}
 .trocas-alerta p{margin:0;line-height:1.5;color:#f1e3d0}.trocas-alerta .troca.suspeita{display:block;color:#e8d4bb}.trocas-alerta .actions{display:flex;gap:8px}
 .troca-badge{margin:4px 0 0;padding:6px 10px;border-radius:8px;background:#2a2212;color:#ffd9ad;font-size:12px;font-weight:700}
+/* ===== Vagas, carga, histórico, comparação e impressão do relatório ===== */
+.vagas-alerta{margin:0 0 20px;padding:16px 18px;border:1px solid #c97a2e;border-radius:14px;background:#231b12}
+.vagas-alerta h3{margin:0 0 10px;font-size:15px;color:#ffd9ad}.vagas-alerta ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.vagas-alerta li{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.vagas-alerta li strong{min-width:52px}.vagas-alerta li span{flex:1;color:#e8d4bb}.vagas-alerta button{padding:6px 12px}
+.grid-add-row td{background:#12222f}.grid-add-row td:first-child{color:#9fd8cc;font-weight:700}.grid-add-row select{width:100%;font-size:11px;min-width:130px}
+.carga-corpo,.historico-corpo{padding:16px 20px}details.carga>summary,details.historico>summary{padding:16px 20px;cursor:pointer;font-weight:700}.carga-resumo,.historico-contagem{color:#90a7b8;font-weight:400;font-size:13px}
+tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a}
+.historico td input{width:100%;min-width:150px;font-size:12px;padding:6px 8px}
+.prod-table td.sobe{color:#7ee0b0}.prod-table td.desce{color:#ff9a86}
+@media print{
+ :root{background:#fff!important;color:#111!important}
+ body.imprimindo-producao{background:#fff!important}
+ body.imprimindo-producao header,body.imprimindo-producao .workspace-nav,body.imprimindo-producao .flow-summary,body.imprimindo-producao .trocas-alerta,body.imprimindo-producao .vagas-alerta,body.imprimindo-producao #overview-panel,body.imprimindo-producao #flow-panel,body.imprimindo-producao #schedule-panel,body.imprimindo-producao #assistant-panel,body.imprimindo-producao #roster-panel,body.imprimindo-producao #tasks-panel,body.imprimindo-producao #notes-panel,body.imprimindo-producao .prod-controls .prod-refresh,body.imprimindo-producao .prod-print,body.imprimindo-producao .prod-csv{display:none!important}
+ body.imprimindo-producao #production-panel{display:block!important}
+ body.imprimindo-producao #production-panel *{color:#111!important;background:transparent!important;box-shadow:none!important}
+ body.imprimindo-producao .flow-kpi,body.imprimindo-producao .prod-section,body.imprimindo-producao .prod-table th,body.imprimindo-producao .prod-table td{border:1px solid #bbb!important}
+ body.imprimindo-producao .prod-table tbody tr:nth-child(even) td{background:#f3f3f3!important}
+ body.imprimindo-producao .flow-kpi-label,body.imprimindo-producao .eyebrow{color:#555!important}
+ body.imprimindo-producao .prod-section{break-inside:avoid}
+ @page{size:A4 landscape;margin:12mm}
+}

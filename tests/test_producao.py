@@ -183,3 +183,13 @@ class HistoricoTrocasTests(unittest.TestCase):
         for ruim in ({**item, 'status': 'qualquer'}, {**item, 'slot': 20}, {**item, 'extra': 1}, {**item, 'data': 'ontem'}):
             with self.assertRaises(online.ApiError):
                 online.validate_items({'rt-upa:trocas': json.dumps([ruim])})
+
+
+class HistoricoEscalaTests(unittest.TestCase):
+    def test_servidor_valida_historico_de_trocas(self):
+        item = {'id': 'x1', 'data': '2026-10-01', 'slot': 2, 'saiu': 'ANA\nCRM 1 - SMS', 'entrou': 'BIA\nCRM 2 - SMS',
+                'origem': 'manual', 'motivo': '', 'criadoEm': '2026-10-01T10:00:00.000Z'}
+        self.assertIn('historico', online.validate_items({'rt-upa:historico': json.dumps([item])}))
+        for ruim in ({**item, 'origem': 'robô'}, {**item, 'slot': 16}, {**item, 'motivo': 'x' * 301}, {k: v for k, v in item.items() if k != 'motivo'}):
+            with self.assertRaises(online.ApiError):
+                online.validate_items({'rt-upa:historico': json.dumps([ruim])})

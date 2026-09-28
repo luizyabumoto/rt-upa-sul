@@ -98,6 +98,21 @@ export function escalados(seed, storage, data, turno) {
  return nomes;
 }
 
+// Período de comparação com a mesma duração: o imediatamente anterior ou o mesmo do ano passado.
+// Recebe e devolve horários locais de Cuiabá (AAAA-MM-DDTHH:MM).
+export function periodoComparado(inicio, fim, modo) {
+ const a = new Date(inicio.slice(0, 16) + ':00Z'), b = new Date(fim.slice(0, 16) + ':00Z');
+ if (modo === 'ano') { a.setUTCFullYear(a.getUTCFullYear() - 1); b.setUTCFullYear(b.getUTCFullYear() - 1); return {inicio: a.toISOString().slice(0, 16), fim: b.toISOString().slice(0, 16)}; }
+ const duracao = b - a;
+ return {inicio: new Date(a.getTime() - duracao).toISOString().slice(0, 16), fim: a.toISOString().slice(0, 16)};
+}
+
+export function variacao(atual, anterior) {
+ if (!anterior) return atual ? 'novo' : '0%';
+ const pct = Math.round((atual - anterior) / anterior * 100);
+ return `${pct > 0 ? '+' : ''}${pct}%`;
+}
+
 // Plantões (início às 07h ou 19h) que começam dentro do período, no horário de Cuiabá.
 export function plantoesDoPeriodo(inicio, fim) {
  const lista = [], limite = new Date(fim.slice(0, 16) + ':00Z');
@@ -147,14 +162,14 @@ const el = (tag, className, text) => { const n = document.createElement(tag); if
 export function mountProduction(storage, seed) {
  const panel = document.querySelector('#production-panel');
  if (!panel) return;
- panel.innerHTML = '<div class="section-heading"><div><p class="eyebrow">GESTOR SAÚDE · PRODUÇÃO ANALÍTICO</p><h2>Produção médica</h2></div><div class="actions"><span class="prod-updated" role="status" aria-live="polite"></span><button type="button" class="secondary prod-refresh">Atualizar</button></div></div>' +
-  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Ranking<select class="prod-group"></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
+ panel.innerHTML = '<div class="section-heading"><div><p class="eyebrow">GESTOR SAÚDE · PRODUÇÃO ANALÍTICO</p><h2>Produção médica</h2></div><div class="actions"><span class="prod-updated" role="status" aria-live="polite"></span><button type="button" class="secondary prod-refresh">Atualizar</button><button type="button" class="secondary prod-print">Relatório do mês (PDF)</button></div></div>' +
+  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Ranking<select class="prod-group"></select></label><label>Comparar com<select class="prod-compare"><option value="">Sem comparação</option><option value="anterior">Período anterior</option><option value="ano">Mesmo período do ano passado</option></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
   '<p class="flow-alert prod-alert" role="alert" hidden></p><div class="flow-kpis prod-kpis"></div><div class="prod-escala"></div><div class="prod-tables"></div>' +
   '<p class="notice">Consultas nos Consultórios Adulto (Médico Clínico) e Pediátrico (Médico Pediatra), pelo horário do atendimento. Plantões de 12 h: diurno 07h–19h e noturno 19h–07h. Retornos baixados aparecem à parte e não entram no total nem no ranking. Clique no nome do médico para ver os plantões dele na escala.</p>';
  const $ = s => panel.querySelector(s);
  for (const [v, t] of PERIODOS) $('.prod-period').add(new Option(t, v));
  for (const [v, t] of AGRUPAR) $('.prod-group').add(new Option(t, v));
- let dados = null, lista = [], carregando = false, pedido = 0;
+ let dados = null, lista = [], carregando = false, pedido = 0, comparado = null;
 
  function escolha() {
   const chave = $('.prod-period').value;
@@ -186,6 +201,7 @@ export function mountProduction(storage, seed) {
    if (!lista.some(m => m.classes[chave])) continue;
    const th = el('th', 'num'); const dot = el('span', 'flow-dot'); dot.style.setProperty('--risk', cor); th.append(dot, document.createTextNode(' ' + nome)); head.append(th);
   }
+  if (comparado?.registros) head.append(el('th', 'num', 'Δ vs comparação'));
   head.append(el('th', 'num muted', 'Retornos*'));
   const thead = el('thead'); thead.append(head); tabela.append(thead);
   const body = el('tbody');
@@ -194,6 +210,7 @@ export function mountProduction(storage, seed) {
    const nome = el('td'); nome.append(botaoMedico(m.medico));
    tr.append(el('td', 'pos', m.total ? String(i + 1) : '—'), nome, el('td', 'num strong', String(m.total)), el('td', 'num', String(m.adulto)), el('td', 'num', String(m.pediatria)), el('td', 'num', String(m.plantoes)), el('td', 'num', String(m.mediaPlantao)));
    for (const [chave] of CLASSES) if (lista.some(x => x.classes[chave])) tr.append(el('td', 'num', String(m.classes[chave] || 0)));
+   if (comparado?.registros) { const antes = ranking(comparado.registros).find(x => mesmoMedico(x.medico, m.medico))?.total || 0, dif = m.total - antes; tr.append(el('td', `num ${dif > 0 ? 'sobe' : dif < 0 ? 'desce' : 'muted'}`, `${dif > 0 ? '+' : ''}${dif} (${antes})`)); }
    tr.append(el('td', 'num muted', String(m.retornos)));
    body.append(tr);
   });
@@ -272,10 +289,15 @@ export function mountProduction(storage, seed) {
   if (!dados.disponivel) alerta.textContent = `Não foi possível ler a produção agora: ${dados.erro || 'falha na leitura'}${dados.registros?.length ? ' Mostrando a última leitura válida.' : ''}`;
   lista = ranking(dados.registros || []);
   const comConsulta = lista.filter(m => m.total), total = comConsulta.reduce((s, m) => s + m.total, 0);
+  // Comparação: mesmos indicadores no outro período, com a variação em %.
+  const base = comparado?.registros ? ranking(comparado.registros).filter(m => m.total) : null;
+  const soma = (l, campo) => l.reduce((s, m) => s + m[campo], 0);
+  const rotuloComp = comparado ? `${dataBR(comparado.inicio)} a ${dataBR(comparado.fim)}` : '';
+  const comp = (atual, anterior) => base ? ` · ${variacao(atual, anterior)} vs ${anterior} (${rotuloComp})` : '';
   $('.prod-kpis').replaceChildren(
-   ...[['CONSULTAS', total, `${dataBR(dados.inicio)} ${dados.inicio.slice(11, 16)} → ${dados.emAndamento ? 'agora' : `${dataBR(dados.fim)} ${dados.fim.slice(11, 16)}`}`],
-    ['ADULTO', comConsulta.reduce((s, m) => s + m.adulto, 0), 'Médico Clínico'],
-    ['PEDIATRIA', comConsulta.reduce((s, m) => s + m.pediatria, 0), 'Médico Pediatra'],
+   ...[['CONSULTAS', total, `${dataBR(dados.inicio)} ${dados.inicio.slice(11, 16)} → ${dados.emAndamento ? 'agora' : `${dataBR(dados.fim)} ${dados.fim.slice(11, 16)}`}${comp(total, base && soma(base, 'total'))}`],
+    ['ADULTO', soma(comConsulta, 'adulto'), `Médico Clínico${comp(soma(comConsulta, 'adulto'), base && soma(base, 'adulto'))}`],
+    ['PEDIATRIA', soma(comConsulta, 'pediatria'), `Médico Pediatra${comp(soma(comConsulta, 'pediatria'), base && soma(base, 'pediatria'))}`],
     ['MÉDICOS', comConsulta.length, `${(total / horas).toFixed(1).replace('.', ',')} consultas por hora`],
     ['RETORNOS BAIXADOS', lista.reduce((s, m) => s + m.retornos, 0), 'à parte · não contam']].map(([rotulo, valor, detalhe]) => {
     const box = el('div', 'flow-kpi'); box.append(el('span', 'flow-kpi-label', rotulo), el('strong', 'flow-kpi-value', String(valor)), el('small', '', detalhe)); return box; }));
@@ -298,6 +320,15 @@ export function mountProduction(storage, seed) {
    const corpo = await resposta.json().catch(() => ({}));
    if (!resposta.ok) throw new Error(corpo.error || 'O servidor do RT UPA Sul não respondeu.');
    if (meu === pedido) dados = corpo;
+   comparado = null;
+   const modo = $('.prod-compare').value;
+   if (modo && corpo.disponivel && meu === pedido) {
+    const p = periodoComparado(corpo.inicio, corpo.fim, modo);
+    $('.prod-updated').textContent = 'Lendo o período de comparação…';
+    const r2 = await fetch(`/api/producao?inicio=${encodeURIComponent(p.inicio)}&fim=${encodeURIComponent(p.fim)}`, {cache: 'no-store'});
+    const c2 = await r2.json().catch(() => ({}));
+    if (r2.ok && c2.disponivel && meu === pedido) comparado = c2;
+   }
   } catch (erro) {
    if (meu === pedido) dados = {...(dados || {registros: [], inicio, fim: new Date().toISOString()}), disponivel: false, erro: erro.message};
   } finally {
@@ -313,7 +344,11 @@ export function mountProduction(storage, seed) {
  };
  $('.prod-start').onchange = $('.prod-end').onchange = carregar;
  $('.prod-group').onchange = render;
+ $('.prod-compare').onchange = carregar;
  $('.prod-refresh').onclick = carregar;
+ // Relatório do mês: usa a impressão do navegador (Salvar como PDF). O @media print deixa só este painel.
+ $('.prod-print').onclick = () => { document.body.classList.add('imprimindo-producao'); window.print(); setTimeout(() => document.body.classList.remove('imprimindo-producao'), 500); };
+ window.addEventListener('afterprint', () => document.body.classList.remove('imprimindo-producao'));
  $('.prod-csv').onclick = () => {
   if (!lista.length) return;
   const rotulo = $('.prod-period').selectedOptions[0].textContent;

@@ -4,13 +4,15 @@ import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor} from './scheduling.js';
+import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor,clinicoOccupancy} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {mountFlow} from './flow.js';
 import {mountProduction} from './production.js';
 import {mountDemand} from './demand.js';
 import {mountTrocas} from './trocas.js';
+import {registrarTroca, mountHistorico} from './historico.js';
+import {mountAlertasEscala} from './escala-alertas.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -64,12 +66,17 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  slotNames.slice(0,14).forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name+(slot<7?" · 07h–19h · 12h":" · 19h–07h · 12h");row.append(title);
  for(const day of days){const td=document.createElement('td');const key=`${day.date}|${slot}`;const base=baseline(day.date,slot,day.weekday);const selected=Object.hasOwn(edits,key)?edits[key]:base;if(selected!==base){td.classList.add('changed');changed++}if(!selected)td.classList.add('empty');const select=document.createElement('select');select.setAttribute('aria-label',`${name} em ${day.date}`);
  const options=['',...doctorOptions(doctors().slice(1),selected)];for(const doctor of options)select.add(new Option((vacationConflicts(storage,doctor,day.date,slot).length?'⚠ EM FÉRIAS · ':'')+label(doctor),doctor));select.value=selected;
- select.addEventListener('change',()=>{const update=get(storageKey(),{});if(select.value===base)delete update[key];else update[key]=select.value;put(storageKey(),update);document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(select);
+ select.addEventListener('change',()=>{registrarTroca(storage,{data:day.date,slot,saiu:selected,entrou:select.value});const update=get(storageKey(),{});if(select.value===base)delete update[key];else update[key]=select.value;put(storageKey(),update);document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(select);
  const covers=segments(seed,storage,day.date,slot).filter(x=>x.coverage);if(covers.length){if(selected===base)changed++;select.value=covers[0].doctor;select.disabled=true;const note=document.createElement('small');note.textContent='Cobertura: '+covers.map(x=>x.doctor.replaceAll('\n',' · ')).join(' / ');td.append(note);td.classList.add('changed');}
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  for(const seg of segments(seed,storage,day.date,slot)){for(const leave of vacationConflicts(storage,seg.doctor,day.date,slot)){td.classList.add('vacation-conflict');const warning=document.createElement('small');warning.className='vacation-warning';warning.textContent=vacationMessage(leave);td.append(warning);alerts++;}}
  const collisions=overlaps.get(`${day.date}|${slot}`)||[];if(collisions.length){duplicatePosts++;td.classList.add('overlap-conflict');for(const collision of collisions){const warning=document.createElement('small');warning.className='overlap-warning';warning.textContent=overlapMessage(collision);td.append(warning);}}
- row.append(td)}body.append(row)});
+ row.append(td)}body.append(row);
+ // Clínicos 1 a 4 são postos iguais: esta linha coloca o médico na primeira vaga livre de cada dia.
+ if(slot===3||slot===10){const turno=slot===3?'dia':'noite',rotulo=slot===3?'Diurno':'Noturno',linha=document.createElement('tr');linha.className='grid-add-row';const titulo=document.createElement('td');titulo.textContent=`${rotulo} · + Adicionar clínico`;linha.append(titulo);
+  for(const day of days){const td=document.createElement('td'),occ=clinicoOccupancy(seed,storage,day.date,turno);if(!occ.free.length){const ok=document.createElement('small');ok.textContent=`Completo · ${occ.total}/${occ.total}`;td.append(ok);}else{const escolha=document.createElement('select');escolha.setAttribute('aria-label',`Adicionar clínico ${rotulo.toLowerCase()} em ${day.date}`);escolha.add(new Option(`+ ${occ.free.length} ${occ.free.length===1?'vaga':'vagas'}`,''));for(const doctor of doctors().slice(1))escolha.add(new Option(label(doctor),doctor));
+   escolha.addEventListener('change',()=>{if(!escolha.value)return;const destino=occ.free[0],update=get(storageKey(),{});registrarTroca(storage,{data:day.date,slot:destino,saiu:'',entrou:escolha.value});update[`${day.date}|${destino}`]=escolha.value;put(storageKey(),update);document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(escolha);}linha.append(td);}body.append(linha);}
+ });
  for(const select of document.querySelectorAll('#body select')){select.classList.add(affiliationClass(select.value));doctorSearchButton(select);}
  renderVisitors();
  document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento · ${duplicatePosts} postos com choque de horário`;
@@ -89,9 +96,11 @@ document.querySelector('#backup').addEventListener('click',()=>{const data={vers
 settings();render();
 mountOrganizer(storage,seed);
 // Módulo independente: uma falha no Fluxo de pacientes nunca pode impedir a escala de abrir.
-try{mountFlow();mountDemand();}catch(error){console.error('Fluxo de pacientes',error);}
+try{mountFlow();mountDemand(storage,seed);}catch(error){console.error('Fluxo de pacientes',error);}
 try{mountProduction(storage,seed);}catch(error){console.error('Produção médica',error);}
 try{mountTrocas(storage,seed);}catch(error){console.error('Trocas detectadas',error);}
+try{mountHistorico(storage);}catch(error){console.error('Histórico de trocas',error);}
+try{mountAlertasEscala(storage,seed);}catch(error){console.error('Vagas e carga',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

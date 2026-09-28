@@ -3,6 +3,7 @@
 // ajustada sozinha e o Painel avisa, com "Manter" e "Desfazer". Com dúvida, só avisa.
 import {parse, periodKey, baseDoctor, segments, doctorChoices, affiliation, MISSING_CRM} from './scheduling.js';
 import {plantaoAtual, mesmoMedico} from './production.js';
+import {registrarTroca} from './historico.js';
 
 export const MINIMO_CONSULTAS = 5;          // quem entrou precisa ter atendido pelo menos isso no plantão
 export const HORAS_ANTES_DE_TROCAR = 2;     // no plantão em andamento, esperar o plantão "engrenar"
@@ -57,6 +58,7 @@ export function aplicarTrocas(seed, storage, plantao, registros, agora = new Dat
    novo = `${t.entrou}\nCRM ${MISSING_CRM} - ${affiliation(t.saiu) || 'SMS'}`;
    storage.setItem('rt-upa:doctors', JSON.stringify([...parse(storage, 'doctors', []), novo]));
   }
+  registrarTroca(storage, {data: plantao.data, slot: t.slot, saiu: t.saiu, entrou: novo, origem: 'produção'}, agora);
   gravarPosto(storage, plantao.data, t.slot, novo);
   historico.push({id, data: plantao.data, turno: plantao.turno, slot: t.slot, saiu: t.saiu, entrou: novo, consultas: t.consultas, status: 'aplicada', criadoEm: agora.toISOString()});
   mudou = true;
@@ -68,6 +70,7 @@ export function aplicarTrocas(seed, storage, plantao, registros, agora = new Dat
 export function desfazer(storage, id) {
  const historico = parse(storage, 'trocas', []), item = historico.find(h => h.id === id);
  if (!item || item.status === 'desfeita') return false;
+ registrarTroca(storage, {data: item.data, slot: item.slot, saiu: item.entrou, entrou: item.saiu, origem: 'desfeita'});
  gravarPosto(storage, item.data, item.slot, item.saiu);
  item.status = 'desfeita';
  storage.setItem('rt-upa:trocas', JSON.stringify(historico));
