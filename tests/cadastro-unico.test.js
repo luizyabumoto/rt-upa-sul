@@ -7,7 +7,9 @@ const seed = JSON.parse(readFileSync(new URL('../src/seed.json', import.meta.url
 
 test('padroniza espaços, vínculo e as correções confirmadas de nome e CRM', () => {
  assert.equal(canonicalDoctor('CAIO LIMA RIBEIRO  DE ALMEIDA\nCRM 11030-  SMS'), 'CAIO LIMA RIBEIRO DE ALMEIDA\nCRM 11030 - SMS');
- assert.equal(canonicalDoctor('SILVIA CORREIA RAMOS RIBEIRO\nCRM  7438 - SMS'), 'SILVIA CORREIA RAMOS RIBEIRO\nCRM 7438 - SMS');
+ // Nome passa a seguir o Gestor Saúde (fonte mais confiável).
+ assert.equal(canonicalDoctor('SILVIA CORREIA RAMOS RIBEIRO\nCRM  7438 - SMS'), 'SILVIA CORREA RAMOS RIBEIRO\nCRM 7438 - SMS');
+ assert.equal(canonicalDoctor('MARIA CLARA TRETTEL\nCRM 17525 - COAPH'), 'MARIA CLARA TRETTEL DE OLIVEIRA\nCRM 17525 - COAPH');
  assert.equal(canonicalDoctor('DHYEILLEN AYLLEN WEBER\nCRM 16798 -EXTRA SMS'), 'DHYEILLEN AYLLEN WEBER\nCRM 16798 - EXTRA SMS');
  assert.equal(canonicalDoctor('GUSTAVO LUIZ SILA CAMPOS\nCRM 11745 - SMS'), 'GUSTAVO LUIZ SILVA CAMPOS\nCRM 11745 - SMS');
  assert.equal(canonicalDoctor('BLAYRA BORGES\nCRM 13940 -EXTRA  SMS'), 'BLAYRA BORGES BARBOSA\nCRM 13940 - EXTRA SMS');

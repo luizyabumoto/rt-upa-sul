@@ -127,7 +127,13 @@ export function periodReview(seed,storage,dates){
 // gravado (a planilha oficial depende dele), mas nome, CRM e vínculo são padronizados e o
 // mesmo médico aparece uma vez só nas listas; o vínculo é escolhido em cada plantão.
 export const AFFILIATIONS=['SMS','COAPH','EXTRA SMS'];
-const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges:'BLAYRA BORGES BARBOSA',josepedromarchryvacari:'JOSÉ PEDRO MACHRY VACARI'};
+const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges:'BLAYRA BORGES BARBOSA',josepedromarchryvacari:'JOSÉ PEDRO MACHRY VACARI',
+ // Nomes como estão no Gestor Saúde (fonte mais confiável), para a produção bater com a escala.
+ anakellenpadilha:'ANA KELLEN PADILHA CORREIA DE LIMA',anapaulamachadodasilvadeoliveira:'ANA PAULA MACHADO DA SILVA OLIVEIRA',
+ ceciliacopettidambros:'CECÍLIA COPETTI DAMBRÓS',jheniferalvesflores:'JHENIFFER ALVES FLORES',joaovictorlinodasilva:'JOAO VITOR LINO DA SILVA',
+ leticiailkiufrancelino:'LETICIA ILKIU FRANCELINO',luiseduardobrescancim:'LUÍS EDUARDO BRESCANCIM',mariaclaratrettel:'MARIA CLARA TRETTEL DE OLIVEIRA',
+ rafaelfariasgolembra:'RAFAEL FARIAS GOLEMBA',rafaelgabrielgarlindalbo:'RAFAEL GABRIEL GARLINI DAL BO',raynasouzagoncalves:'RAYNA FERRER DE SOUZA GONCALVES',
+ silviacorreiaramosribeiro:'SILVIA CORREA RAMOS RIBEIRO',thaisguimaraesdesouza:'THAIS GUIMARAES DE SOUZA'};
 // CRM 17422 é da Ingrid; o do José Pedro vinha repetido (ou "A CONFIRMAR") e é 17877.
 const CRM_FIXES={josepedromachryvacari:{from:['17422',''],to:'17877'}};
 export const MISSING_CRM='A CONFIRMAR';

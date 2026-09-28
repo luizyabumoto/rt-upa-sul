@@ -40,8 +40,52 @@ CLASSIFICACOES = {
 }
 
 
+# Produção médica: consultas contam; retornos ficam só como informação (dar baixa não é atender).
+PRODUCAO = {
+    'adulto': ('CONSULTORIO ADULTO', '225125'),        # Médico Clínico
+    'pediatria': ('CONSULTORIO PEDIATRICO', '225124'),  # Médico Pediatra
+    'retornoAdulto': ('RETORNO ADULTO', '225125'),
+    'retornoPediatria': ('RETORNO PEDIATRICO', '225124'),
+}
+CLASSES_PRODUCAO = {'EMERGENCIA': 'emergencia', 'MUITO URGENTE': 'muitoUrgente', 'URGENTE': 'urgente', 'PRIORIDADE': 'prioridade',
+                    'POUCO URGENTE': 'poucoUrgente', 'NAO URGENTE': 'naoUrgente', 'PROCEDIMENTOS': 'procedimentos', 'SEM CLASSIFICACAO': 'semClassificacao'}
+
+
 class GestorSaudeError(Exception):
     pass
+
+
+def _horario(valor):
+    try:
+        return datetime.fromisoformat(str(valor)[:26]).replace(tzinfo=CUIABA)
+    except ValueError:
+        return None
+
+
+def plantao_de(momento):
+    """Plantões de 12 h: diurno 07h-19h; noturno 19h-07h, que pertence ao dia em que começou."""
+    if 7 <= momento.hour < 19:
+        return momento.date().isoformat(), 'D'
+    if momento.hour >= 19:
+        return momento.date().isoformat(), 'N'
+    return (momento.date() - timedelta(days=1)).isoformat(), 'N'
+
+
+def resumir_producao(linhas):
+    """Contagem por plantão e médico. Nada de paciente: só nome do médico, horário e classificação."""
+    registros = {}
+    for chave, atendimentos in linhas.items():
+        for medico, momento, classificacao in atendimentos:
+            data, turno = plantao_de(momento)
+            registro = registros.setdefault((data, turno, medico), {'data': data, 'turno': turno, 'medico': medico,
+                                                                    'adulto': 0, 'pediatria': 0, 'retornos': 0, 'classes': {}})
+            if chave.startswith('retorno'):
+                registro['retornos'] += 1
+                continue
+            registro[chave] += 1
+            classe = CLASSES_PRODUCAO.get(normalizar(classificacao), 'outros')
+            registro['classes'][classe] = registro['classes'].get(classe, 0) + 1
+    return sorted(registros.values(), key=lambda r: (r['data'], r['turno'], r['medico']))
 
 
 def normalizar(texto):
@@ -119,7 +163,8 @@ class GestorSaude:
         self.base = (env.get('GESTOR_SAUDE_URL') or 'https://gestorsaude.cuiaba.mt.gov.br/').rstrip('/') + '/'
         self.usuario, self.senha = env.get('GESTOR_SAUDE_USUARIO', ''), env.get('GESTOR_SAUDE_SENHA', '')
         self.abrir, self.relogio = abrir, relogio
-        self.token, self.expira = None, 0
+        self.token, self.expira, self.tipos = None, 0, None
+        self.trava = threading.Lock()
 
     @property
     def configurado(self):
@@ -163,33 +208,87 @@ class GestorSaude:
         # Renova com folga de 5 minutos antes do vencimento do JWT.
         self.expira = float(self._claims(self.token).get('exp', self.relogio() + 3600)) - 300
 
-    def fila(self):
+    def _com_token(self, acao):
+        """Executa com o token atual; se o Gestor Saúde recusar, entra de novo uma única vez."""
         if not self.configurado:
             raise GestorSaudeError('A integração com o Gestor Saúde ainda não foi configurada.')
         for tentativa in range(2):
-            if not self.token or self.relogio() >= self.expira:
-                self._entrar()
+            with self.trava:
+                if not self.token or self.relogio() >= self.expira:
+                    self._entrar()
             try:
-                itens, pagina = [], 1
-                while True:
-                    resposta = self._chamar('api/PacienteAtendimento/Pagination/true', {
-                        'page': pagina, 'pageSize': 1000, 'filter': [], 'sort': [{'column': 'prioridade', 'direction': 'asc'}]}, token=self.token)
-                    itens += resposta.get('items') or []
-                    if len(itens) >= int(resposta.get('recordCount') or 0) or pagina >= 5 or not resposta.get('items'):
-                        return itens
-                    pagina += 1
+                return acao()
             except PermissionError:
                 self.token = None
                 if tentativa:
                     raise GestorSaudeError('O Gestor Saúde recusou o acesso da conta configurada.')
-        return []
+
+    def fila(self):
+        def ler():
+            itens, pagina = [], 1
+            while True:
+                resposta = self._chamar('api/PacienteAtendimento/Pagination/true', {
+                    'page': pagina, 'pageSize': 1000, 'filter': [], 'sort': [{'column': 'prioridade', 'direction': 'asc'}]}, token=self.token)
+                itens += resposta.get('items') or []
+                if len(itens) >= int(resposta.get('recordCount') or 0) or pagina >= 5 or not resposta.get('items'):
+                    return itens
+                pagina += 1
+        return self._com_token(ler)
+
+    def _tipos_producao(self):
+        """IDs de tipo de atendimento e CBO do relatório, descobertos pelo nome e pelo código do CBO."""
+        if not self.tipos:
+            tipos = {normalizar(t.get('atendimentoTipo')): t.get('atendimentoTipoId') for t in self._chamar('api/AtendimentoTipo', token=self.token, metodo='GET') or []}
+            resultado = {}
+            for chave, (nome, codigo) in PRODUCAO.items():
+                if not tipos.get(nome):
+                    raise GestorSaudeError(f'Tipo de atendimento "{nome}" não encontrado no Gestor Saúde.')
+                cbos = self._chamar(f'api/Cbo/GetByAtendimentoTipoId/{tipos[nome]}', token=self.token, metodo='GET') or []
+                cbo = next((b.get('cboId') for b in cbos if str(b.get('cboCodigo')) == codigo), None)
+                if not cbo:
+                    raise GestorSaudeError(f'CBO {codigo} não disponível para {nome} no Gestor Saúde.')
+                resultado[chave] = (tipos[nome], cbo)
+            self.tipos = resultado
+        return self.tipos
+
+    def producao(self, inicio, fim):
+        """Atendimentos do relatório Produção Analítico (formato 2 = dados), só médico, horário e classificação.
+        O Gestor Saúde aceita no máximo 31 dias por consulta; períodos maiores são lidos em partes."""
+        def ler():
+            linhas = {}
+            for chave, (tipo, cbo) in self._tipos_producao().items():
+                linhas[chave] = []
+                parte = inicio
+                while parte < fim:
+                    ate = min(parte + timedelta(days=30), fim)
+                    resposta = self._chamar('api/PacienteAtendimento/ImprimirProducaoAnalitico', {
+                        'atendimentoTipoId': tipo, 'cboId': cbo, 'profissionalId': 0, 'formato': 2,
+                        'competenciaInicial': parte.strftime('%Y-%m-%d %H:%M'), 'competenciaFinal': ate.strftime('%Y-%m-%d %H:%M')}, token=self.token) or {}
+                    for atendimento in resposta.get('atendimentos') or []:
+                        momento = _horario(atendimento.get('dataAtendimento'))
+                        # Descarta aqui os dados do paciente; o limite evita contar duas vezes na emenda das partes.
+                        if momento and parte <= momento < ate + timedelta(minutes=1) and (momento < fim + timedelta(minutes=1)):
+                            linhas[chave].append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento, atendimento.get('classificacaoDescricao')))
+                    parte = ate + timedelta(minutes=1) if ate < fim else fim
+            return linhas
+        return self._com_token(ler)
+
+
+_CLIENTE = None
+
+
+def cliente_compartilhado():
+    """Fluxo e Produção usam o mesmo token: cada login novo pode derrubar a sessão do usuário no navegador."""
+    global _CLIENTE
+    _CLIENTE = _CLIENTE or GestorSaude()
+    return _CLIENTE
 
 
 class PainelFluxo:
     """Guarda a última leitura válida e limita a frequência de consultas ao Gestor Saúde."""
 
     def __init__(self, cliente=None, relogio=time.time, cache_segundos=None):
-        self.cliente = cliente or GestorSaude()
+        self.cliente = cliente or cliente_compartilhado()
         self.relogio = relogio
         self.cache = float(cache_segundos if cache_segundos is not None else os.environ.get('FLUXO_CACHE_SEGUNDOS') or 45)
         self.ultimo, self.lido_em, self.tentado_em, self.erro = None, 0, 0, None
@@ -212,3 +311,40 @@ class PainelFluxo:
                     'atualizadoEm': datetime.fromtimestamp(self.lido_em, timezone.utc).isoformat() if self.lido_em else None,
                     'intervaloSegundos': int(self.cache)}
             return {**base, 'dados': self.ultimo}
+
+
+class PainelProducao:
+    """Produção por período. Plantão em andamento: releitura a cada 2 min; períodos encerrados: 6 h de cache."""
+    LIMITE_DIAS = 93
+
+    def __init__(self, cliente=None, relogio=time.time):
+        self.cliente = cliente or cliente_compartilhado()
+        self.relogio = relogio
+        self.cache = {}
+        self.trava = threading.Lock()
+
+    def obter(self, inicio, fim=None):
+        agora = datetime.fromtimestamp(self.relogio(), CUIABA).replace(second=0, microsecond=0)
+        fim = min(fim or agora, agora)
+        if inicio >= fim:
+            raise ValueError('O início precisa ser antes do fim.')
+        if fim - inicio > timedelta(days=self.LIMITE_DIAS):
+            raise ValueError(f'Escolha um período de até {self.LIMITE_DIAS} dias.')
+        aberto = agora - fim < timedelta(minutes=5)
+        chave = (inicio.isoformat(), 'agora' if aberto else fim.isoformat())
+        with self.trava:
+            guardado = self.cache.get(chave)
+            if guardado and self.relogio() < guardado[0]:
+                return guardado[1]
+            try:
+                resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
+                             'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
+                             'registros': resumir_producao(self.cliente.producao(inicio, fim))}
+            except GestorSaudeError as erro:
+                if guardado:
+                    return {**guardado[1], 'disponivel': False, 'erro': str(erro)}
+                return {'disponivel': False, 'erro': str(erro), 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto, 'atualizadoEm': None, 'registros': []}
+            if len(self.cache) > 40:
+                self.cache.clear()
+            self.cache[chave] = (self.relogio() + (120 if aberto else 6 * 3600), resultado)
+            return resultado

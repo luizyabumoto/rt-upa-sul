@@ -15,9 +15,19 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
+PRODUCAO = None
+
+
+def parse_minuto(valor):
+    """Data e hora local de Cuiabá no formato AAAA-MM-DDTHH:MM, vindas da tela de produção."""
+    from datetime import datetime
+    from gestor_saude import CUIABA
+    if not isinstance(valor, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', valor):
+        raise ApiError(400, 'Informe início e fim no formato de data e hora.')
+    return datetime.fromisoformat(valor).replace(tzinfo=CUIABA)
 
 
 class ApiError(Exception):
@@ -263,6 +273,19 @@ def app(environ, start_response):
             from gestor_saude import PainelFluxo
             FLUXO = FLUXO or PainelFluxo()
             return respond(200, FLUXO.obter(forcar=environ.get('QUERY_STRING') == 'atualizar=1'))
+        if path == '/api/producao' and method == 'GET':
+            global PRODUCAO
+            from urllib.parse import parse_qs
+            from gestor_saude import PainelProducao
+            query = parse_qs(environ.get('QUERY_STRING', ''))
+            inicio = parse_minuto((query.get('inicio') or [''])[0])
+            fim_texto = (query.get('fim') or ['agora'])[0]
+            fim = None if fim_texto == 'agora' else parse_minuto(fim_texto)
+            PRODUCAO = PRODUCAO or PainelProducao()
+            try:
+                return respond(200, PRODUCAO.obter(inicio, fim))
+            except ValueError as error:
+                raise ApiError(400, str(error))
         if path.startswith('/api/push/') and method == 'POST':
             action = path.rsplit('/', 1)[-1]
             if action == 'config':

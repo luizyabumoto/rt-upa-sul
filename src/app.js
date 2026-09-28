@@ -8,6 +8,7 @@ import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliatio
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {mountFlow} from './flow.js';
+import {mountProduction} from './production.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -84,6 +85,7 @@ settings();render();
 mountOrganizer(storage,seed);
 // Módulo independente: uma falha no Fluxo de pacientes nunca pode impedir a escala de abrir.
 try{mountFlow();}catch(error){console.error('Fluxo de pacientes',error);}
+try{mountProduction(storage,seed);}catch(error){console.error('Produção médica',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);
