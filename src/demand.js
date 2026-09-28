@@ -136,13 +136,13 @@ export function mountDemand(storage, seed) {
  if (!flow) return;
  const secao = el('section', 'demand');
  secao.innerHTML = '<div class="section-heading"><div><p class="eyebrow">ANÁLISE DE DEMANDA · CONSULTAS MÉDICAS</p><h2>Quando a unidade mais atende</h2></div><div class="actions"><span class="demand-status" role="status" aria-live="polite"></span></div></div>' +
-  '<div class="prod-controls"><label>Período<select class="demand-period"></select></label><label class="demand-free" hidden>Início<input type="date" class="demand-start"></label><label class="demand-free" hidden>Fim<input type="date" class="demand-end"></label></div>' +
+  '<div class="prod-controls"><label>Período<select class="demand-period"></select></label><label class="demand-free" hidden>Início<input type="date" class="demand-start"></label><label class="demand-free" hidden>Fim<input type="date" class="demand-end"></label><label>Turno<select class="demand-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–18h)</option><option value="N">Só noturno (19h–06h)</option></select></label></div>' +
   '<div class="flow-kpis demand-kpis"></div><div class="demand-charts"></div>' +
   '<p class="notice">Consultas nos Consultórios Adulto e Pediátrico pelo horário do atendimento (retornos não entram). Médias por dia da semana e por hora consideram todos os dias do período, inclusive os com zero. Meses já encerrados ficam guardados neste navegador.</p>';
  flow.append(secao);
  const $ = s => secao.querySelector(s);
  for (const [v, t] of PERIODOS) $('.demand-period').add(new Option(t, v));
- let pedido = 0, carregado = false;
+ let pedido = 0, carregado = false, ultimo = null;
 
  const guardado = janela => { try { return JSON.parse(localStorage.getItem('rt-demanda:' + janela.inicio + '|' + janela.fim)); } catch { return null; } };
  const guardar = (janela, horas) => { try { localStorage.setItem('rt-demanda:' + janela.inicio + '|' + janela.fim, JSON.stringify(horas)); } catch { /* sem espaço: só não guarda */ } };
@@ -207,13 +207,24 @@ export function mountDemand(storage, seed) {
    Object.assign(horas, parte);
   }
   if (meu !== pedido) return;
-  const fimReal = periodo.fim === 'agora' ? texto(cuiaba(new Date())) : periodo.fim;
-  render(analisar(horas, periodo.inicio, fimReal), periodo.inicio, periodo.fim === 'agora' ? 'hoje' : dataBR(periodo.fim), horas);
+  ultimo = {horas, inicio: periodo.inicio, fimReal: periodo.fim === 'agora' ? texto(cuiaba(new Date())) : periodo.fim, rotuloFim: periodo.fim === 'agora' ? 'hoje' : dataBR(periodo.fim)};
+  desenhar();
   $('.demand-status').textContent = falhas ? `Atenção: ${falhas} de ${lista.length} partes do período não puderam ser lidas agora.` : `Atualizado às ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}`;
+ }
+
+ // Filtra as horas por turno (diurno 07h–18h · noturno 19h–06h) e redesenha, sem reler o Gestor Saúde.
+ let turnoDemanda = '';
+ function desenhar() {
+  if (!ultimo) return;
+  const t = turnoDemanda;
+  const dentro = h => t === 'D' ? (h >= 7 && h <= 18) : t === 'N' ? (h >= 19 || h <= 6) : true;
+  const horas = t ? Object.fromEntries(Object.entries(ultimo.horas).filter(([k]) => dentro(Number(k.slice(11, 13))))) : ultimo.horas;
+  render(analisar(horas, ultimo.inicio, ultimo.fimReal), ultimo.inicio, ultimo.rotuloFim, horas);
  }
 
  $('.demand-period').onchange = () => { secao.querySelectorAll('.demand-free').forEach(l => { l.hidden = $('.demand-period').value !== 'livre'; }); if ($('.demand-period').value !== 'livre') carregar(); };
  $('.demand-start').onchange = $('.demand-end').onchange = carregar;
+ secao.addEventListener('change', e => { if (e.target.classList.contains('demand-turno')) { turnoDemanda = e.target.value; desenhar(); } });
  // Carrega na primeira vez que a aba Fluxo de pacientes é aberta.
  document.querySelector('[data-view="flow"]')?.addEventListener('click', () => { if (!carregado) { carregado = true; carregar(); } });
 }
