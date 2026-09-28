@@ -7,6 +7,7 @@ import {mountScheduleView} from './schedule-view.js';
 import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
+import {mountFlow} from './flow.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -81,6 +82,8 @@ A quinzena volta para a escala importada e os fixos. Coberturas, férias e outra
 document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-copia-${new Date().toISOString().slice(0,10)}.json`;a.click();document.querySelector('.backup-menu').open=false;setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 settings();render();
 mountOrganizer(storage,seed);
+// Módulo independente: uma falha no Fluxo de pacientes nunca pode impedir a escala de abrir.
+try{mountFlow();}catch(error){console.error('Fluxo de pacientes',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

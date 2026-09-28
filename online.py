@@ -15,7 +15,9 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js'}
+# Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
+FLUXO = None
 
 
 class ApiError(Exception):
@@ -256,6 +258,11 @@ def app(environ, start_response):
             return respond(200, (ROOT / 'src/seed.json').read_bytes())
         if path == '/api/session' and method == 'GET':
             return respond(200, {'email': user.get('email'), 'id': user['id']})
+        if path == '/api/fluxo' and method == 'GET':
+            global FLUXO
+            from gestor_saude import PainelFluxo
+            FLUXO = FLUXO or PainelFluxo()
+            return respond(200, FLUXO.obter(forcar=environ.get('QUERY_STRING') == 'atualizar=1'))
         if path.startswith('/api/push/') and method == 'POST':
             action = path.rsplit('/', 1)[-1]
             if action == 'config':
