@@ -5,10 +5,17 @@ const days=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const fmt=value=>value.split('-').reverse().join('/');
 export function mountRoster(storage,seed){
  const root=document.querySelector('#roster-panel');
- root.innerHTML=`<div class="section-heading"><div><p class="eyebrow">PADRÃO PARA AS PRÓXIMAS ESCALAS</p><h2>Médicos e dias fixos</h2></div><button id="roster-add">+ Novo dia fixo</button></div><p>Consulte por data. Mudanças valem a partir do dia informado e mantêm o histórico anterior. A escala usa os padrões automaticamente em períodos novos; ajustes pontuais e coberturas confirmadas têm prioridade.</p><div class="form-grid"><label>Válidos em<input id="roster-date" type="date" required><small id="roster-date-label"></small></label><label>Buscar médico<input id="roster-search" type="search" placeholder="Digite parte do nome"></label></div><p id="roster-source" class="notice"></p><p class="link-legend"><span class="affiliation link-sms">SMS · fixo</span> <span class="affiliation link-coaph">COAPH</span> <span class="affiliation link-extra">Extra SMS · repetição somente se você configurar</span></p><details id="doctor-registry"><summary>Cadastro de médicos e CRM · incluir médico de cobertura</summary><p>O cadastro fica salvo na sua conta online e disponível nas sugestões. Cadastrar um médico não cria plantões.</p><div id="registry-form"></div><p id="registry-status" role="status"></p><label>Consultar cadastro por nome ou CRM<input id="registry-search" type="search"></label><div id="registry-list"></div></details><div id="roster-cards" class="day-cards"></div><details><summary id="roster-review-title">Postos para revisar</summary><div id="roster-review"></div></details><details><summary>Histórico das alterações de padrão</summary><div id="roster-history"></div></details><dialog class="coverage-dialog" id="roster-dialog"><form><h2 id="roster-edit-title">Dia fixo</h2><label>Médico<select name="doctor" required></select></label><div class="form-grid"><label>Vínculo neste plantão<select name="affiliation"><option>SMS</option><option>COAPH</option><option>EXTRA SMS</option></select></label><label>Dia da semana<select name="weekday"></select></label><label>Posto e horário<select name="slot"></select></label><label>Válido a partir de<input name="start" type="date" required></label></div><button type="button" id="roster-next" class="secondary">Usar próxima quinzena</button><label id="roster-extra-label" hidden><input type="checkbox" name="repeatExtra"> Repetir este extra toda semana a partir da data informada</label><label><input type="checkbox" name="end"> Encerrar este dia fixo a partir da data informada</label><p id="roster-impact" role="status"></p><label id="roster-replace-label" hidden><input type="checkbox" name="replace"> Confirmo substituir o médico que ocupa esse posto no padrão</label><p class="notice">O vínculo pertence a este plantão. Alterar aqui não muda outros vínculos do mesmo médico. Extras importados continuam pontuais. Para repetir um extra, escolha EXTRA SMS e marque a repetição semanal. Ajustes por data e coberturas confirmadas continuam tendo prioridade.</p><div class="actions"><button type="submit">Salvar mudança</button><button type="button" class="secondary" id="roster-cancel">Cancelar</button></div></form></dialog>`;
+ root.innerHTML=`<div class="section-heading"><div><p class="eyebrow">PADRÃO PARA AS PRÓXIMAS ESCALAS</p><h2>Médicos e dias fixos</h2></div><button id="roster-add">+ Novo dia fixo</button></div><p>Consulte por data. Mudanças valem a partir do dia informado e mantêm o histórico anterior. A escala usa os padrões automaticamente em períodos novos; ajustes pontuais e coberturas confirmadas têm prioridade.</p><div class="form-grid"><label>Válidos em<input id="roster-date" type="date" required><small id="roster-date-label"></small></label><label>Buscar médico<input id="roster-search" type="search" placeholder="Digite parte do nome"></label></div><p id="roster-source" class="notice"></p><p class="link-legend"><span class="affiliation link-sms">SMS · fixo</span> <span class="affiliation link-coaph">COAPH</span> <span class="affiliation link-extra">Extra SMS · repetição somente se você configurar</span></p><details id="doctor-registry"><summary>Cadastro de médicos e CRM · incluir médico de cobertura</summary><p>O cadastro fica salvo na sua conta online e disponível nas sugestões. Cadastrar um médico não cria plantões.</p><div id="registry-form"></div><p id="registry-status" role="status"></p><label>Consultar cadastro por nome ou CRM<input id="registry-search" type="search"></label><div id="registry-list"></div></details><div id="roster-cards" class="day-cards"></div><details><summary id="roster-review-title">Postos para revisar</summary><div id="roster-review"></div></details><details id="roster-missing-block"><summary id="roster-missing-title">Cadastrados sem nenhum dia fixo</summary><div id="roster-missing"></div></details><details><summary>Histórico das alterações de padrão</summary><div id="roster-history"></div></details><dialog class="coverage-dialog" id="roster-dialog"><form><h2 id="roster-edit-title">Dia fixo</h2><label>Médico<select name="doctor" required></select></label><div class="form-grid"><label>Vínculo neste plantão<select name="affiliation"><option>SMS</option><option>COAPH</option><option>EXTRA SMS</option></select></label><label>Dia da semana<select name="weekday"></select></label><label>Posto e horário<select name="slot"></select></label><label>Válido a partir de<input name="start" type="date" required></label></div><button type="button" id="roster-next" class="secondary">Usar próxima quinzena</button><label id="roster-extra-label" hidden><input type="checkbox" name="repeatExtra"> Repetir este extra toda semana a partir da data informada</label><label><input type="checkbox" name="end"> Encerrar este dia fixo a partir da data informada</label><p id="roster-impact" role="status"></p><label id="roster-replace-label" hidden><input type="checkbox" name="replace"> Confirmo substituir o médico que ocupa esse posto no padrão</label><p class="notice">O vínculo pertence a este plantão. Alterar aqui não muda outros vínculos do mesmo médico. Extras importados continuam pontuais. Para repetir um extra, escolha EXTRA SMS e marque a repetição semanal. Ajustes por data e coberturas confirmadas continuam tendo prioridade.</p><div class="actions"><button type="submit">Salvar mudança</button><button type="button" class="secondary" id="roster-cancel">Cancelar</button></div></form></dialog>`;
  const date=root.querySelector('#roster-date');date.value=document.querySelector('#schedule-date').value;
  const form=root.querySelector('#roster-dialog form'),dialog=root.querySelector('#roster-dialog');let original=null;
- const people=()=>{const map=new Map();for(const d of [...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(x=>x.doctor).filter(Boolean)])if(!map.has(doctorIdentity(d)))map.set(doctorIdentity(d),d);return [...map.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));};
+ // Um mesmo médico pode aparecer no histórico com mais de um vínculo (ex.: uma vez como EXTRA SMS,
+ // outra como SMS). Ao escolher qual string representa a pessoa (pro <select>, pro cadastro, pro
+ // resumo "sem dia fixo"), preferimos sempre SMS/COAPH a EXTRA — senão o formulário de "Novo dia
+ // fixo" pré-seleciona "EXTRA SMS" sozinho, e salvar sem marcar "repetir toda semana" fica bloqueado
+ // silenciosamente (some mensagem no aviso, o card nunca chega a ser criado). Foi provavelmente
+ // isso que fez o dia fixo da Ana Kellen "sumir" — o cadastro dela no sistema começa como EXTRA SMS.
+ const affiliationRank=d=>affiliation(d)==='SMS'?0:affiliation(d)==='COAPH'?1:2;
+ const people=()=>{const map=new Map();for(const d of [...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(x=>x.doctor).filter(Boolean)]){const key=doctorIdentity(d),current=map.get(key);if(!current||affiliationRank(d)<affiliationRank(current))map.set(key,d);}return [...map.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));};
  const name=d=>d.split(/CRM/i)[0].trim();
  const changeDoctor=(d,link)=>`${name(d)}\nCRM ${d.match(/CRM\s*(\d+)/i)?.[1]||''} - ${link}`;
  days.forEach((d,i)=>form.elements.weekday.add(new Option(d,i)));slots.forEach((s,i)=>form.elements.slot.add(new Option(slotLabel(i)+` · ${bounds(i)[1]-bounds(i)[0]}h`,i)));
@@ -19,6 +26,7 @@ export function mountRoster(storage,seed){
  addGenericOption('generic-noite','Noturno · Clínico (qualquer) · 12h',11);
  const turnOf=r=>r?.turn||(r?.generic&&Number.isInteger(r.slot)?(CLINICO_TURNS.dia.includes(r.slot)?'dia':'noite'):null);
  function impact(){
+  root.querySelector('#roster-impact').classList.remove('roster-impact-alert');root.querySelector('#roster-extra-label').classList.remove('roster-impact-alert');
   root.querySelector('#roster-extra-label').hidden=form.elements.affiliation.value!=='EXTRA SMS'||form.elements.end.checked;
   const start=form.elements.start.value,slotValue=form.elements.slot.value,weekday=Number(form.elements.weekday.value),generic=slotValue.startsWith('generic-');
   if(!start)return false;
@@ -58,7 +66,8 @@ export function mountRoster(storage,seed){
  form.onsubmit=e=>{
   e.preventDefault();
   const slotValue=form.elements.slot.value,generic=slotValue.startsWith('generic-');
-  if(affiliation(changeDoctor(form.elements.doctor.value,form.elements.affiliation.value))==='EXTRA SMS'&&!form.elements.end.checked&&!form.elements.repeatExtra.checked){root.querySelector('#roster-impact').textContent='Marque a repetição semanal para cadastrar este extra no padrão. Para um extra pontual, ajuste apenas a data na aba Escala.';return;}
+  if(affiliation(changeDoctor(form.elements.doctor.value,form.elements.affiliation.value))==='EXTRA SMS'&&!form.elements.end.checked&&!form.elements.repeatExtra.checked){const warn=root.querySelector('#roster-impact');warn.textContent='NÃO SALVO: marque "Repetir este extra toda semana" para cadastrar este extra como dia fixo, ou troque o Vínculo para SMS/COAPH se este médico não é extra. Para um extra pontual (sem repetir), ajuste apenas a data na aba Escala.';warn.classList.add('roster-impact-alert');warn.scrollIntoView({behavior:'smooth',block:'nearest'});root.querySelector('#roster-extra-label').classList.add('roster-impact-alert');return;}
+  root.querySelector('#roster-impact').classList.remove('roster-impact-alert');root.querySelector('#roster-extra-label').classList.remove('roster-impact-alert');
   if(!generic&&impact()&&!form.elements.replace.checked)return;
   const start=form.elements.start.value,weekday=Number(form.elements.weekday.value),doctorString=changeDoctor(form.elements.doctor.value,form.elements.affiliation.value);
   if(generic){
@@ -82,18 +91,26 @@ export function mountRoster(storage,seed){
  };
 
  root.querySelector('#roster-next').onclick=()=>{const now=new Date(),next=now.getDate()<16?new Date(now.getFullYear(),now.getMonth(),16):new Date(now.getFullYear(),now.getMonth()+1,1);form.elements.start.value=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`;form.elements.replace.checked=false;impact();};
- const registryForm=document.querySelector('#doctor-form');root.querySelector('#registry-form').append(registryForm);registryForm.querySelector('h3').textContent='Cadastrar médico';registryForm.elements.crm.pattern='[0-9]{1,10}';registryForm.elements.crm.inputMode='numeric';registryForm.elements.crm.placeholder='Número do CRM-MT';registryForm.elements.name.maxLength=160;registryForm.elements.crm.maxLength=10;
+ const registryForm=document.querySelector('#doctor-form');root.querySelector('#registry-form').append(registryForm);registryForm.querySelector('h3').textContent='Cadastrar médico';registryForm.elements.crm.inputMode='numeric';registryForm.elements.crm.placeholder='Número do CRM-MT';registryForm.elements.name.maxLength=160;registryForm.elements.crm.maxLength=12;
+ // O CRM só precisa ser dígitos: limpamos sozinhos o que for colado (pontos, espaços, "CRM-MT" etc.)
+ // em vez de bloquear o salvamento com uma mensagem de formato — foi o que travou o recadastro da Ana Kellen.
+ registryForm.elements.crm.addEventListener('input',()=>{const digits=registryForm.elements.crm.value.replace(/\D/g,'').slice(0,12);if(digits!==registryForm.elements.crm.value)registryForm.elements.crm.value=digits;});
  registryForm.addEventListener('submit',()=>{root.querySelector('#registry-status').textContent='Médico incluído nas sugestões. Confira a confirmação de salvamento online no topo.';});
- function registry(){
+ function registry(groups){
   const list=root.querySelector('#registry-list'),q=searchText(root.querySelector('#registry-search').value);
   list.replaceChildren();
-  const all=[...new Set([...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(r=>r.doctor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const found=all.filter(d=>q.split(' ').every(term=>searchText(d).includes(term)));
+  // Um médico costuma aparecer no histórico com mais de um vínculo (SMS, COAPH, EXTRA SMS) —
+  // usamos a mesma lista já deduplicada por pessoa (people()) pra não mostrar 2 ou 3 linhas
+  // repetidas do mesmo médico aqui, o que só confundia quem estava procurando.
+  const found=people().filter(d=>q.split(' ').every(term=>searchText(d).includes(term)));
   for(const d of found){
+   const count=groups?.get(doctorIdentity(d))?.rules.length||0;
    const line=document.createElement('button');
    line.type='button';
    line.className='registry-entry';
-   line.textContent=d.replaceAll('\n',' · ');
+   const label=document.createElement('span');label.textContent=d.replaceAll('\n',' · ');
+   const tag=document.createElement('small');tag.className='registry-count'+(count?'':' registry-count-empty');tag.textContent=count?`${count} dia${count>1?'s':''} fixo${count>1?'s':''}`:'nenhum dia fixo ainda';
+   line.append(label,tag);
    line.title='Ver os dias fixos deste médico e alterar, ou cadastrar um novo';
    line.onclick=()=>{
     root.querySelector('#roster-search').value=name(d);
@@ -105,33 +122,48 @@ export function mountRoster(storage,seed){
   }
   if(!found.length)list.textContent='Nenhum médico encontrado.';
  }
- root.querySelector('#registry-search').oninput=registry;
- function render(){registry();if(!date.value)return;root.querySelector('#roster-date-label').textContent=`${days[new Date(date.value+'T12:00:00').getDay()]} · ${fmt(date.value)}`;const pattern=patternFor(seed,date.value);root.querySelector('#roster-source').textContent=pattern?`Base: ${pattern.source}. SMS repetidos foram organizados como fixos; COAPH repetidos como padrão habitual. Extras e posições variáveis precisam de revisão.`:'Sem padrão importado para este período. Você pode cadastrar dias fixos.';const conflicts=seed.assignments.filter(x=>x.doctor&&x.date.slice(0,7)===date.value.slice(0,7)&&x.colorAffiliation&&x.colorAffiliation!==x.affiliation);if(conflicts.length)root.querySelector('#roster-source').textContent+=' Atenção: '+conflicts.map(x=>name(x.doctor)+' em '+fmt(x.date)).join('; ')+' têm divergência entre texto e cor. Mantido o vínculo escrito, sem assumir fixo.';const groups=new Map(),review=[];for(let w=0;w<7;w++)for(let slot=0;slot<16;slot++){const r=recurringRule(seed,storage,date.value,w,slot);if(r){const rule={...r,weekday:w,slot};if(r.doctor){const key=doctorIdentity(r.doctor);if(!groups.has(key))groups.set(key,{doctor:r.doctor,rules:[]});groups.get(key).rules.push(rule);}else if(r.status==='review')review.push(rule);}
-  // Dias fixos já salvos que começam depois da data acima não somem da lista:
-  // aparecem marcados como "passa a valer em" para não parecer que o cadastro falhou.
-  for(const future of parse(storage,'roster',[]).filter(x=>x.weekday===w&&x.slot===slot&&x.start>date.value&&x.doctor).sort((a,b)=>a.start.localeCompare(b.start))){const key=doctorIdentity(future.doctor);if(!groups.has(key))groups.set(key,{doctor:future.doctor,rules:[]});groups.get(key).rules.push({...future,weekday:w,slot,upcoming:true});}
+ root.querySelector('#registry-search').oninput=()=>registry(buildGroups(date.value).groups);
+ // Reúne, pra uma data de referência, quantos e quais dias fixos cada médico tem — usado tanto
+ // pra montar os cards quanto pra mostrar a contagem no cadastro e o resumo de quem ainda não tem nada.
+ function buildGroups(refDate){
+  const groups=new Map(),review=[];
+  if(!refDate)return {groups,review,clinicoRows:[]};
+  for(let w=0;w<7;w++)for(let slot=0;slot<16;slot++){const r=recurringRule(seed,storage,refDate,w,slot);if(r){const rule={...r,weekday:w,slot};if(r.doctor){const key=doctorIdentity(r.doctor);if(!groups.has(key))groups.set(key,{doctor:r.doctor,rules:[]});groups.get(key).rules.push(rule);}else if(r.status==='review')review.push(rule);}
+   // Dias fixos já salvos que começam depois da data acima não somem da lista:
+   // aparecem marcados como "passa a valer em" para não parecer que o cadastro falhou.
+   for(const future of parse(storage,'roster',[]).filter(x=>x.weekday===w&&x.slot===slot&&x.start>refDate&&x.doctor).sort((a,b)=>a.start.localeCompare(b.start))){const key=doctorIdentity(future.doctor);if(!groups.has(key))groups.set(key,{doctor:future.doctor,rules:[]});groups.get(key).rules.push({...future,weekday:w,slot,upcoming:true});}
+  }
+  // Médicos "Clínico (qualquer)" cadastrados nunca podem simplesmente sumir da tela — nem quando
+  // a data de início ainda não chegou, nem quando têm mais genéricos cadastrados do que vagas
+  // sobrando hoje (perderam a vez na ordem alfabética). Mesmo bug que a Ana Kellen teve nos fixos
+  // por número — aqui tratado explicitamente pros dois casos.
+  const clinicoRows=parse(storage,'clinicoRoster',[]);
+  const latestClinico=new Map();
+  for(const row of clinicoRows.filter(x=>x.start<=refDate).sort((a,b)=>a.start.localeCompare(b.start)||a.id.localeCompare(b.id)))latestClinico.set(`${row.weekday}|${row.turn}|${doctorIdentity(row.doctor)}`,row);
+  for(const row of [...latestClinico.values()].filter(r=>r.active)){
+   const key=doctorIdentity(row.doctor);
+   const already=(groups.get(key)?.rules||[]).some(r=>r.generic&&r.weekday===row.weekday&&Number.isInteger(r.slot)&&CLINICO_TURNS[row.turn].includes(r.slot));
+   if(!groups.has(key))groups.set(key,{doctor:row.doctor,rules:[]});
+   if(!already)groups.get(key).rules.push({...row,generic:true,overflow:true});
+  }
+  for(const row of clinicoRows.filter(x=>x.start>refDate&&x.active)){
+   const key=doctorIdentity(row.doctor);
+   if(!groups.has(key))groups.set(key,{doctor:row.doctor,rules:[]});
+   groups.get(key).rules.push({...row,generic:true,upcoming:true});
+  }
+  return {groups,review,clinicoRows};
  }
- // Médicos "Clínico (qualquer)" cadastrados nunca podem simplesmente sumir da tela — nem quando
- // a data de início ainda não chegou, nem quando têm mais genéricos cadastrados do que vagas
- // sobrando hoje (perderam a vez na ordem alfabética). Mesmo bug que a Ana Kellen teve nos fixos
- // por número — aqui tratado explicitamente pros dois casos.
- const clinicoRows=parse(storage,'clinicoRoster',[]);
- const latestClinico=new Map();
- for(const row of clinicoRows.filter(x=>x.start<=date.value).sort((a,b)=>a.start.localeCompare(b.start)||a.id.localeCompare(b.id)))latestClinico.set(`${row.weekday}|${row.turn}|${doctorIdentity(row.doctor)}`,row);
- for(const row of [...latestClinico.values()].filter(r=>r.active)){
-  const key=doctorIdentity(row.doctor);
-  const already=(groups.get(key)?.rules||[]).some(r=>r.generic&&r.weekday===row.weekday&&Number.isInteger(r.slot)&&CLINICO_TURNS[row.turn].includes(r.slot));
-  if(!groups.has(key))groups.set(key,{doctor:row.doctor,rules:[]});
-  if(!already)groups.get(key).rules.push({...row,generic:true,overflow:true});
- }
- for(const row of clinicoRows.filter(x=>x.start>date.value&&x.active)){
-  const key=doctorIdentity(row.doctor);
-  if(!groups.has(key))groups.set(key,{doctor:row.doctor,rules:[]});
-  groups.get(key).rules.push({...row,generic:true,upcoming:true});
- }
+ function render(){if(!date.value){registry();return;}root.querySelector('#roster-date-label').textContent=`${days[new Date(date.value+'T12:00:00').getDay()]} · ${fmt(date.value)}`;const pattern=patternFor(seed,date.value);root.querySelector('#roster-source').textContent=pattern?`Base: ${pattern.source}. SMS repetidos foram organizados como fixos; COAPH repetidos como padrão habitual. Extras e posições variáveis precisam de revisão.`:'Sem padrão importado para este período. Você pode cadastrar dias fixos.';const conflicts=seed.assignments.filter(x=>x.doctor&&x.date.slice(0,7)===date.value.slice(0,7)&&x.colorAffiliation&&x.colorAffiliation!==x.affiliation);if(conflicts.length)root.querySelector('#roster-source').textContent+=' Atenção: '+conflicts.map(x=>name(x.doctor)+' em '+fmt(x.date)).join('; ')+' têm divergência entre texto e cor. Mantido o vínculo escrito, sem assumir fixo.';const {groups,review,clinicoRows}=buildGroups(date.value);registry(groups);
  const rowLabel=r=>(r.generic&&!Number.isInteger(r.slot)?`${days[r.weekday]} · ${r.turn==='dia'?'Diurno':'Noturno'} · Clínico (qualquer)`:`${days[r.weekday]} · ${slotLabel(r.slot)}`+(r.generic?' · (qualquer)':''));
  const cards=root.querySelector('#roster-cards');cards.replaceChildren();const query=doctorIdentity(root.querySelector('#roster-search').value);for(const group of [...groups.values()].sort((a,b)=>name(a.doctor).localeCompare(name(b.doctor),'pt-BR'))){if(query&&!doctorIdentity(group.doctor).includes(query))continue;const card=document.createElement('article');card.className='shift-card';const h=document.createElement('h3');h.textContent=name(group.doctor);card.append(h);for(const r of group.rules.sort((a,b)=>(a.upcoming===b.upcoming?0:a.upcoming?1:-1)||a.weekday-b.weekday)){const row=document.createElement('div');row.className='roster-line'+(r.upcoming?' roster-upcoming':'');const p=document.createElement('p');p.textContent=rowLabel(r)+(r.upcoming?` · passa a valer em ${fmt(r.start)}`:'')+(r.overflow?' · sem posto vago nesta data':'');const badge=document.createElement('span');badge.className='affiliation '+affiliationClass(r.doctor);badge.textContent=(r.upcoming?'Agendado · ':'')+(r.overflow?'Sem posto hoje · ':'')+affiliation(r.doctor);const button=document.createElement('button');button.className='secondary';button.textContent='Alterar';button.setAttribute('aria-label',`Alterar ${name(group.doctor)} ${rowLabel(r)}`);button.onclick=()=>open(r);row.append(p,badge,button);card.append(row);}const add=document.createElement('button');add.className='secondary';add.textContent='+ Outro dia fixo';add.onclick=()=>open(null,group.doctor);card.append(add);cards.append(card);}if(!cards.children.length)cards.textContent='Nenhum médico com dia fixo nesta seleção.';
  const target=root.querySelector('#roster-review');target.replaceChildren();root.querySelector('#roster-review-title').textContent=`Postos para revisar (${review.length})`;for(const r of review){const line=document.createElement('div');line.className='roster-line';const p=document.createElement('p');p.textContent=`${days[r.weekday]} · ${slotLabel(r.slot)} — ${r.candidates?.length?'Nomes encontrados: '+r.candidates.map(name).join(', '):'Só extras ou vagas na referência'}`;const b=document.createElement('button');b.textContent='Definir fixo';b.className='secondary';b.onclick=()=>open(r,r.candidates?.[0]);line.append(p,b);target.append(line);}
+ // Quem está cadastrado (SMS/COAPH, com vínculo regular) mas ainda não tem nenhum dia fixo —
+ // pra não esquecer ninguém na hora de montar uma escala nova.
+ const missingTarget=root.querySelector('#roster-missing');missingTarget.replaceChildren();
+ const missing=people().filter(d=>affiliation(d)!=='EXTRA SMS'&&!(groups.get(doctorIdentity(d))?.rules.length)).sort((a,b)=>name(a).localeCompare(name(b),'pt-BR'));
+ root.querySelector('#roster-missing-title').textContent=`Cadastrados sem nenhum dia fixo (${missing.length})`;
+ if(missing.length)for(const d of missing){const line=document.createElement('div');line.className='roster-line';const p=document.createElement('p');p.textContent=name(d);const b=document.createElement('button');b.className='secondary';b.textContent='Definir dia fixo';b.onclick=()=>open(null,d);line.append(p,b);missingTarget.append(line);}
+ else missingTarget.textContent='Todos os médicos cadastrados (SMS/COAPH) já têm pelo menos um dia fixo.';
  const history=root.querySelector('#roster-history');history.replaceChildren();
  const historyItems=[
   ...parse(storage,'roster',[]).map(r=>({start:r.start,text:`${days[r.weekday]} · ${slotLabel(r.slot)}: ${r.doctor.replaceAll('\n',' · ')||'Sem fixo'}`})),
