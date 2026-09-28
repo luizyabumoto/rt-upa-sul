@@ -84,7 +84,27 @@ export function mountRoster(storage,seed){
  root.querySelector('#roster-next').onclick=()=>{const now=new Date(),next=now.getDate()<16?new Date(now.getFullYear(),now.getMonth(),16):new Date(now.getFullYear(),now.getMonth()+1,1);form.elements.start.value=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`;form.elements.replace.checked=false;impact();};
  const registryForm=document.querySelector('#doctor-form');root.querySelector('#registry-form').append(registryForm);registryForm.querySelector('h3').textContent='Cadastrar médico';registryForm.elements.crm.pattern='[0-9]{1,10}';registryForm.elements.crm.inputMode='numeric';registryForm.elements.crm.placeholder='Número do CRM-MT';registryForm.elements.name.maxLength=160;registryForm.elements.crm.maxLength=10;
  registryForm.addEventListener('submit',()=>{root.querySelector('#registry-status').textContent='Médico incluído nas sugestões. Confira a confirmação de salvamento online no topo.';});
- function registry(){const list=root.querySelector('#registry-list'),q=searchText(root.querySelector('#registry-search').value);list.replaceChildren();const all=[...new Set([...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(r=>r.doctor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));const found=all.filter(d=>q.split(' ').every(term=>searchText(d).includes(term)));for(const d of found){const line=document.createElement('p');line.textContent=d.replaceAll('\n',' · ');list.append(line);}if(!found.length)list.textContent='Nenhum médico encontrado.';}
+ function registry(){
+  const list=root.querySelector('#registry-list'),q=searchText(root.querySelector('#registry-search').value);
+  list.replaceChildren();
+  const all=[...new Set([...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(r=>r.doctor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const found=all.filter(d=>q.split(' ').every(term=>searchText(d).includes(term)));
+  for(const d of found){
+   const line=document.createElement('button');
+   line.type='button';
+   line.className='registry-entry';
+   line.textContent=d.replaceAll('\n',' · ');
+   line.title='Ver os dias fixos deste médico e alterar, ou cadastrar um novo';
+   line.onclick=()=>{
+    root.querySelector('#roster-search').value=name(d);
+    render();
+    root.querySelector('#roster-cards').scrollIntoView({behavior:'smooth',block:'start'});
+    if(!root.querySelector('#roster-cards').children.length)open(null,d);
+   };
+   list.append(line);
+  }
+  if(!found.length)list.textContent='Nenhum médico encontrado.';
+ }
  root.querySelector('#registry-search').oninput=registry;
  function render(){registry();if(!date.value)return;root.querySelector('#roster-date-label').textContent=`${days[new Date(date.value+'T12:00:00').getDay()]} · ${fmt(date.value)}`;const pattern=patternFor(seed,date.value);root.querySelector('#roster-source').textContent=pattern?`Base: ${pattern.source}. SMS repetidos foram organizados como fixos; COAPH repetidos como padrão habitual. Extras e posições variáveis precisam de revisão.`:'Sem padrão importado para este período. Você pode cadastrar dias fixos.';const conflicts=seed.assignments.filter(x=>x.doctor&&x.date.slice(0,7)===date.value.slice(0,7)&&x.colorAffiliation&&x.colorAffiliation!==x.affiliation);if(conflicts.length)root.querySelector('#roster-source').textContent+=' Atenção: '+conflicts.map(x=>name(x.doctor)+' em '+fmt(x.date)).join('; ')+' têm divergência entre texto e cor. Mantido o vínculo escrito, sem assumir fixo.';const groups=new Map(),review=[];for(let w=0;w<7;w++)for(let slot=0;slot<16;slot++){const r=recurringRule(seed,storage,date.value,w,slot);if(r){const rule={...r,weekday:w,slot};if(r.doctor){const key=doctorIdentity(r.doctor);if(!groups.has(key))groups.set(key,{doctor:r.doctor,rules:[]});groups.get(key).rules.push(rule);}else if(r.status==='review')review.push(rule);}
   // Dias fixos já salvos que começam depois da data acima não somem da lista:
