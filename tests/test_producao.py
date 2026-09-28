@@ -193,3 +193,29 @@ class HistoricoEscalaTests(unittest.TestCase):
         for ruim in ({**item, 'origem': 'robô'}, {**item, 'slot': 16}, {**item, 'motivo': 'x' * 301}, {k: v for k, v in item.items() if k != 'motivo'}):
             with self.assertRaises(online.ApiError):
                 online.validate_items({'rt-upa:historico': json.dumps([ruim])})
+
+
+class PerfilMedicoHoraTests(unittest.TestCase):
+    def test_pacientes_por_hora_pico_e_vale_por_medico(self):
+        from gestor_saude import resumir_medicos_hora, CUIABA
+        from datetime import datetime
+        def at(medico, iso):
+            return (medico, datetime.fromisoformat(iso).replace(tzinfo=CUIABA), 'URGENTE')
+        linhas = {
+            'adulto': [
+                at('ANA', '2026-10-06T08:10'), at('ANA', '2026-10-06T08:40'), at('ANA', '2026-10-06T08:55'),  # 3 numa hora
+                at('ANA', '2026-10-06T14:00'),                                                                  # 1 às 14h
+                at('ANA', '2026-10-13T08:20'),                                                                  # 1 às 8h de outro dia
+                at('BIA', '2026-10-06T09:00'),
+            ],
+            'retornoAdulto': [at('ANA', '2026-10-06T23:00')],   # retorno não conta
+        }
+        perfil = {m['medico']: m for m in resumir_medicos_hora(linhas)}
+        ana = perfil['ANA']
+        self.assertEqual(ana['total'], 5)          # sem o retorno
+        self.assertEqual(ana['maxHora'], 3)        # 3 pacientes entre 08h-09h de 06/10
+        self.assertEqual(ana['porHora'], round(5 / 3, 1))   # 3 horas-relógio ativas (08h e 14h dia 06, 08h dia 13)
+        self.assertEqual(ana['horaPico'], 8)       # média 8h = (3+1)/2 = 2 pacientes
+        self.assertEqual(ana['mediaPico'], 2.0)
+        self.assertEqual(ana['horaVale'], 14)      # 14h = 1 paciente em 1 dia
+        self.assertEqual(perfil['BIA']['total'], 1)

@@ -88,6 +88,41 @@ def resumir_producao(linhas):
     return sorted(registros.values(), key=lambda r: (r['data'], r['turno'], r['medico']))
 
 
+def resumir_medicos_hora(linhas):
+    """Perfil por hora de cada médico (só consultas, sem retornos): pacientes por hora, pico e vale.
+    Nada de paciente; só nome do médico e horário do atendimento."""
+    from collections import Counter, defaultdict
+    relogio = defaultdict(Counter)   # médico -> contagem por hora-relógio real ('AAAA-MM-DDTHH')
+    for chave, atendimentos in linhas.items():
+        if chave.startswith('retorno'):
+            continue
+        for medico, momento, _ in atendimentos:
+            relogio[medico][momento.strftime('%Y-%m-%dT%H')] += 1
+    resultado = []
+    for medico, contagem in relogio.items():
+        total = sum(contagem.values())
+        horas_ativas = len(contagem)               # horas-relógio em que atendeu ao menos 1
+        soma = [0] * 24
+        dias = [set() for _ in range(24)]
+        for hora_chave, n in contagem.items():
+            h = int(hora_chave[11:13])
+            soma[h] += n
+            dias[h].add(hora_chave[:10])
+        # Média por hora do dia = atendimentos naquela faixa ÷ dias em que ele trabalhou nela.
+        ativas = [(h, soma[h] / len(dias[h])) for h in range(24) if dias[h]]
+        pico = max(ativas, key=lambda x: x[1])
+        vale = min(ativas, key=lambda x: x[1])
+        resultado.append({
+            'medico': medico.split('\n')[0],
+            'total': total,
+            'porHora': round(total / horas_ativas, 1) if horas_ativas else 0,
+            'maxHora': max(contagem.values()),
+            'horaPico': pico[0], 'mediaPico': round(pico[1], 1),
+            'horaVale': vale[0], 'mediaVale': round(vale[1], 1),
+        })
+    return sorted(resultado, key=lambda r: (-r['porHora'], -r['total']))
+
+
 def normalizar(texto):
     sem_acento = unicodedata.normalize('NFD', texto or '').encode('ascii', 'ignore').decode()
     return ' '.join(sem_acento.split()).upper()
@@ -341,7 +376,7 @@ class PainelProducao:
             try:
                 resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
                              'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
-                             'registros': resumir_producao(self.cliente.producao(inicio, fim))}
+                             **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas)})(self.cliente.producao(inicio, fim))}
             except GestorSaudeError as erro:
                 if guardado:
                     return {**guardado[1], 'disponivel': False, 'erro': str(erro)}

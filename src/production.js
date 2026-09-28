@@ -284,6 +284,30 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
+ function tabelaPerfilHora() {
+  const um = n => Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+  const hh = h => `${String(h).padStart(2, '0')}h`;
+  const lista = (dados.perfilMedicos || []).filter(m => m.total);
+  const box = el('section', 'prod-section');
+  box.append(el('h3', '', 'Ritmo por hora dos médicos'), el('p', 'chart-sub', 'Pacientes por hora de cada médico no período, com o horário em que mais e menos produz.'));
+  if (!lista.length) { box.append(el('p', 'notice', 'Sem consultas no período.')); return box; }
+  const tabela = el('table', 'prod-table'), head = el('tr');
+  for (const [t, cls] of [['#'], ['Médico'], ['Consultas', 'num'], ['Pacientes/hora', 'num'], ['Pico numa hora', 'num'], ['Horário que mais produz'], ['Horário que menos produz']]) head.append(el('th', cls || '', t));
+  const thead = el('thead'); thead.append(head); tabela.append(thead);
+  const corpo = el('tbody');
+  lista.forEach((m, i) => {
+   const tr = el('tr'); if (i === 0) tr.className = 'destaque';
+   const nome = el('td'); nome.append(botaoMedico(m.medico));
+   tr.append(el('td', 'pos', String(i + 1)), nome, el('td', 'num', String(m.total)), el('td', 'num strong', um(m.porHora)),
+    el('td', 'num', String(m.maxHora)), el('td', '', `${hh(m.horaPico)} · ${um(m.mediaPico)}/h`), el('td', 'muted', `${hh(m.horaVale)} · ${um(m.mediaVale)}/h`));
+   corpo.append(tr);
+  });
+  tabela.append(corpo);
+  const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  box.append(wrap, el('small', 'muted', '"Pacientes/hora" = consultas ÷ horas em que o médico atendeu. "Pico numa hora" é o maior número de pacientes num único intervalo de 1 hora. Os horários usam a média por faixa do dia.'));
+  return box;
+ }
+
  function tabelaEquipes() {
   const um = n => Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
   const lista = equipes(dados.registros || []), media = mediaUnidade(dados.registros || []);
@@ -376,7 +400,7 @@ export function mountProduction(storage, seed) {
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
   if (agrupamento !== 'total') tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaCruzamento());
+  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaPerfilHora(), tabelaCruzamento());
  }
 
  async function carregar() {
