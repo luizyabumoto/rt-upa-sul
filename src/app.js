@@ -79,8 +79,25 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  });
  for(const select of document.querySelectorAll('#body select')){select.classList.add(affiliationClass(select.value));doctorSearchButton(select);}
  renderVisitors();
- document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento · ${duplicatePosts} postos com choque de horário`;
+ document.querySelector('#count').textContent=`${changed} alterações`;const alertsEl=document.querySelector('#alerts');alertsEl.textContent=`${alerts} conflitos com afastamento · ${duplicatePosts} postos com choque de horário`;alertsEl.classList.toggle('clicavel',alerts+duplicatePosts>0);
 }
+// Clicar no resumo de conflitos abre a lista de afastamentos/férias e choques de horário da quinzena.
+const conflitosDialog=document.createElement('dialog');conflitosDialog.className='review-dialog';document.body.append(conflitosDialog);
+document.querySelector('#summary').addEventListener('click',event=>{
+ if(!event.target.closest('#alerts'))return;
+ let days;try{days=fortnight(Number(document.querySelector('#year').value),Number(monthEl.value),Number(document.querySelector('#half').value))}catch{return}
+ const review=periodReview(seed,storage,days.map(d=>d.date));
+ const nome=d=>String(d).split('\n')[0];const br=x=>x.split('-').reverse().join('/');
+ conflitosDialog.replaceChildren();const form=document.createElement('form');form.method='dialog';
+ form.append(Object.assign(document.createElement('h2'),{textContent:`Conflitos · ${days[0].day} a ${days.at(-1).day}/${String(days[0].month).padStart(2,'0')}`}));
+ const secao=(titulo,itens)=>{if(!itens.length)return;const h=document.createElement('h3');h.textContent=`${titulo} · ${itens.length}`;const ul=document.createElement('ul');for(const t of itens){const li=document.createElement('li');li.textContent=t;ul.append(li)}form.append(h,ul)};
+ secao('Médico de férias escalado',review.vacations.map(v=>`${br(v.date)} · ${slotNames[v.slot]} · ${nome(v.doctor)}`));
+ secao('Médico afastado escalado',review.absences.map(v=>`${br(v.date)} · ${slotNames[v.slot]} · ${nome(v.doctor)}`));
+ secao('Choque de horário',review.overlaps.map(o=>`${nome(o.other.doctor)} · ${br(o.date)} ${slotNames[o.slot]} × ${br(o.other.date)} ${slotNames[o.other.slot]}`));
+ if(!review.vacations.length&&!review.absences.length&&!review.overlaps.length)form.append(Object.assign(document.createElement('p'),{textContent:'Nenhum conflito de afastamento ou choque de horário nesta quinzena.'}));
+ const acoes=document.createElement('div');acoes.className='actions';const fechar=document.createElement('button');fechar.textContent='Fechar';acoes.append(fechar);form.append(acoes);
+ conflitosDialog.append(form);conflitosDialog.showModal();
+});
 document.querySelector('#doctor-form').elements.name.addEventListener('input',event=>event.target.setCustomValidity(''));
 document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);if(!String(data.get('name')).trim()){event.currentTarget.elements.name.setCustomValidity('Informe o nome do médico.');event.currentTarget.elements.name.reportValidity();return;}const doctor=canonicalDoctor(`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`);put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});

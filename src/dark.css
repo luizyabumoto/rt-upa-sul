@@ -142,3 +142,6 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 .prod-table tr.destaque td{background:#12303a!important}.prod-table tr.destaque td.strong,.prod-table tr.destaque td.pos{color:#7ee5cf}
 .shift-card>button.secondary{width:100%;margin-top:8px;font-size:12px}
 .account-bar.erro{border-color:#d34c4c;background:#3a1c1c}.account-bar.erro [role=status]{color:#ffb4b4!important;font-weight:700}
+.shift-controls{display:grid;gap:8px;margin-top:10px}.shift-controls label{display:grid;gap:6px;font-size:12px;color:#90a7b8}.shift-controls .link-select{width:100%}.shift-controls>button{width:100%;font-size:12px}
+.retorno-ferias{margin:6px 0 0;padding:6px 10px;border-radius:8px;background:#123030;color:#8fe0cf;font-size:12px;font-weight:700}
+#alerts.clicavel{cursor:pointer;text-decoration:underline dotted;color:#ffd28a!important}
