@@ -219,3 +219,18 @@ class PerfilMedicoHoraTests(unittest.TestCase):
         self.assertEqual(ana['mediaPico'], 2.0)
         self.assertEqual(ana['horaVale'], 14)      # 14h = 1 paciente em 1 dia
         self.assertEqual(perfil['BIA']['total'], 1)
+
+
+class AtrasosTests(unittest.TestCase):
+    def test_atraso_para_iniciar_e_maior_intervalo(self):
+        from gestor_saude import resumir_atrasos, CUIABA
+        from datetime import datetime
+        at = lambda medico, iso: (medico, datetime.fromisoformat(iso).replace(tzinfo=CUIABA), 'URGENTE')
+        linhas = {'adulto': [
+            at('ANA', '2026-10-06T07:30'), at('ANA', '2026-10-06T09:30'), at('ANA', '2026-10-06T10:00'),   # diurno: atraso 30min, maior intervalo 120min
+            at('BIA', '2026-10-06T19:05'),                                                                   # noturno: atraso 5min
+        ], 'retornoAdulto': [at('ANA', '2026-10-06T23:00')]}
+        r = {x['medico']: x for x in resumir_atrasos(linhas)}
+        self.assertEqual((r['ANA']['atrasoMedio'], r['ANA']['piorAtraso'], r['ANA']['maiorIntervalo']), (30, 30, 120))
+        self.assertEqual(r['BIA']['atrasoMedio'], 5)
+        self.assertEqual(list(x['medico'] for x in resumir_atrasos(linhas)), ['ANA', 'BIA'])   # ordenado por atraso

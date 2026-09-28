@@ -123,6 +123,35 @@ def resumir_medicos_hora(linhas):
     return sorted(resultado, key=lambda r: (-r['porHora'], -r['total']))
 
 
+def resumir_atrasos(linhas):
+    """Por médico: atraso para o 1º atendimento do plantão e maior intervalo sem atender.
+    Início do plantão: 07h (diurno) ou 19h (noturno). Só consultas; sem dados de paciente."""
+    from collections import defaultdict
+    por_plantao = defaultdict(list)                        # (data, turno, médico) -> horários
+    for chave, atendimentos in linhas.items():
+        if chave.startswith('retorno'):
+            continue
+        for medico, momento, _ in atendimentos:
+            data, turno = plantao_de(momento)
+            por_plantao[(data, turno, medico)].append(momento)
+    por_medico = defaultdict(lambda: {'plantoes': 0, 'atrasos': [], 'intervalos': []})
+    for (data, turno, medico), momentos in por_plantao.items():
+        momentos.sort()
+        inicio = datetime.fromisoformat(f'{data}T{"07" if turno == "D" else "19"}:00').replace(tzinfo=CUIABA)
+        atraso = max(0, (momentos[0] - inicio).total_seconds() / 60)
+        maior_intervalo = max((((b - a).total_seconds() / 60) for a, b in zip(momentos, momentos[1:])), default=0)
+        m = por_medico[medico]
+        m['plantoes'] += 1
+        m['atrasos'].append(atraso)
+        m['intervalos'].append(maior_intervalo)
+    media = lambda xs: round(sum(xs) / len(xs)) if xs else 0
+    return sorted(({
+        'medico': medico.split('\n')[0], 'plantoes': d['plantoes'],
+        'atrasoMedio': media(d['atrasos']), 'piorAtraso': round(max(d['atrasos'])) if d['atrasos'] else 0,
+        'intervaloMedio': media(d['intervalos']), 'maiorIntervalo': round(max(d['intervalos'])) if d['intervalos'] else 0,
+    } for medico, d in por_medico.items()), key=lambda r: (-r['atrasoMedio'], -r['piorAtraso']))
+
+
 def normalizar(texto):
     sem_acento = unicodedata.normalize('NFD', texto or '').encode('ascii', 'ignore').decode()
     return ' '.join(sem_acento.split()).upper()
@@ -376,7 +405,7 @@ class PainelProducao:
             try:
                 resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
                              'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
-                             **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas)})(self.cliente.producao(inicio, fim))}
+                             **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas), 'atrasos': resumir_atrasos(linhas)})(self.cliente.producao(inicio, fim))}
             except GestorSaudeError as erro:
                 if guardado:
                     return {**guardado[1], 'disponivel': False, 'erro': str(erro)}

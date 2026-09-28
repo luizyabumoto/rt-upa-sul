@@ -24,17 +24,25 @@ function tile(rotulo, valor, detalhe) {
  return box;
 }
 
+// Tempo-alvo de espera do Protocolo de Manchester, por classificação (em minutos).
+export const ALVO_MANCHESTER = {vermelho: 0, laranja: 10, amarelo: 60, verde: 120, azul: 240};
+
 function riskCard(c) {
  const card = el('article', 'flow-risk');
  card.style.setProperty('--risk', c.cor);
+ const alvo = ALVO_MANCHESTER[c.chave];
+ const estourou = alvo !== undefined && c.maiorEspera !== null && c.maiorEspera > alvo;
+ if (estourou) card.classList.add('flow-estourou');
  const head = el('div', 'flow-risk-head');
  head.append(el('span', 'flow-dot'), el('h3', '', c.nome.toUpperCase()), el('small', '', c.descricao));
  const count = el('p', 'flow-count');
  count.append(el('strong', '', String(c.aguardando)), document.createTextNode(' aguardando'));
- card.append(head, count,
-  el('p', '', `Maior espera: ${formatarEspera(c.maiorEspera)}`),
+ const maior = el('p', estourou ? 'flow-maior-alerta' : '');
+ maior.textContent = `Maior espera: ${formatarEspera(c.maiorEspera)}` + (alvo !== undefined ? ` · alvo ${alvo === 0 ? 'imediato' : formatarEspera(alvo)}` : '');
+ card.append(head, count, maior,
   el('p', '', `Média: ${formatarEspera(c.media)}`),
   el('small', 'flow-split', `Adulto ${c.adulto} · Pediatria ${c.pediatria}`));
+ if (estourou) card.append(el('p', 'flow-estourou-nota', `⚠ Acima do tempo-alvo de Manchester`));
  return card;
 }
 

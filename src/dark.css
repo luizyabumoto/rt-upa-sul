@@ -145,3 +145,6 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 .shift-controls{display:grid;gap:8px;margin-top:10px}.shift-controls label{display:grid;gap:6px;font-size:12px;color:#90a7b8}.shift-controls .link-select{width:100%}.shift-controls>button{width:100%;font-size:12px}
 .retorno-ferias{margin:6px 0 0;padding:6px 10px;border-radius:8px;background:#123030;color:#8fe0cf;font-size:12px;font-weight:700}
 #alerts.clicavel{cursor:pointer;text-decoration:underline dotted;color:#ffd28a!important}
+.flow-risk.flow-estourou{border-color:#d34c4c;box-shadow:0 0 0 1px #d34c4c55 inset}
+.flow-maior-alerta{color:#ff9daa!important;font-weight:700}
+.flow-estourou-nota{margin:4px 0 0;color:#ffb4b4;font-size:12px;font-weight:700}

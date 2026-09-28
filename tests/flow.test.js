@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {formatarEspera, tempoDesde} from '../src/flow.js';
+import {formatarEspera, tempoDesde, ALVO_MANCHESTER} from '../src/flow.js';
 
 test('tempo de espera em formato humano', () => {
  assert.equal(formatarEspera(0), '0 min');
@@ -16,4 +16,11 @@ test('"atualizado há" em segundos e minutos', () => {
  assert.equal(tempoDesde('2026-09-28T19:59:48Z', agora), 'há 12 s');
  assert.equal(tempoDesde('2026-09-28T19:55:00Z', agora), 'há 5 min');
  assert.equal(tempoDesde(null, agora), 'nunca');
+});
+
+test('alvo de Manchester marca a classificação acima do tempo', () => {
+ assert.equal(ALVO_MANCHESTER.amarelo, 60);
+ assert.equal(ALVO_MANCHESTER.verde, 120);
+ assert.equal(ALVO_MANCHESTER.azul, 240);
+ assert.equal(ALVO_MANCHESTER.vermelho, 0);
 });

@@ -311,6 +311,30 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
+ // Minutos em formato humano (0, 18 min, 1h12).
+ const minutos = m => m < 1 ? 'na hora' : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+ function tabelaAtrasos() {
+  const lista = dados.perfilMedicos ? (dados.atrasos || []) : [];
+  const box = el('section', 'prod-section');
+  box.append(el('h3', '', 'Início do atendimento e intervalos'), el('p', 'chart-sub', 'Tempo entre o início do plantão (07h diurno · 19h noturno) e o 1º atendimento do médico, e o maior intervalo entre dois atendimentos no mesmo plantão. Período inteiro.' + (turnoAtual ? ' (O filtro de turno não se aplica a esta tabela.)' : '')));
+  if (!lista.length) { box.append(el('p', 'notice', 'Sem consultas no período.')); return box; }
+  const tabela = el('table', 'prod-table'), head = el('tr');
+  for (const [t, cls] of [['#'], ['Médico'], ['Plantões', 'num'], ['1º atendimento após início (médio)', 'num'], ['Maior demora num plantão', 'num'], ['Maior intervalo sem atender', 'num']]) head.append(el('th', cls || '', t));
+  const thead = el('thead'); thead.append(head); tabela.append(thead);
+  const corpo = el('tbody');
+  lista.forEach((m, i) => {
+   const tr = el('tr');
+   const nome = el('td'); nome.append(botaoMedico(m.medico));
+   tr.append(el('td', 'pos', String(i + 1)), nome, el('td', 'num', String(m.plantoes)),
+    el('td', 'num strong', minutos(m.atrasoMedio)), el('td', 'num', minutos(m.piorAtraso)), el('td', 'num', minutos(m.maiorIntervalo)));
+   corpo.append(tr);
+  });
+  tabela.append(corpo);
+  const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  box.append(wrap, el('small', 'muted', 'Atenção: Cinderelas (12h/18h), extras e médicos que entram em horário diferente das 07h/19h aparecem com valores altos aqui, sem terem se atrasado. Há ainda direito a até 2h de repouso e ao transporte. Use como ponto de conversa, nunca como punição automática.'));
+  return box;
+ }
+
  function tabelaEquipes() {
   const um = n => Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
   const lista = equipes(filtra(dados.registros)), media = mediaUnidade(filtra(dados.registros));
@@ -403,7 +427,7 @@ export function mountProduction(storage, seed) {
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
   if (agrupamento !== 'total') tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaPerfilHora(), tabelaCruzamento());
+  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento());
  }
 
  async function carregar() {
