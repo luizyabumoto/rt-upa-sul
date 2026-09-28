@@ -25,3 +25,8 @@
 .shift-card.needs-doctor{border-color:#c97a2e;box-shadow:0 8px 28px #0002,inset 0 0 0 1px #c97a2e55}
 /* Abas do topo acompanham a rolagem, então trocar de área não exige voltar ao topo da página. */
 .workspace-nav{position:sticky;top:0;z-index:30;background:#0c121cf2;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.backup-menu{position:relative}.backup-menu>summary{list-style:none;cursor:pointer;padding:10px 14px;border:1px solid #3e576c;border-radius:9px;color:#b8d4e6;font-weight:700;user-select:none}.backup-menu>summary::-webkit-details-marker{display:none}.backup-menu>summary::after{content:' ▾'}.backup-menu[open]>summary::after{content:' ▴'}
+.backup-options{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(92vw,360px);display:grid;gap:14px;padding:16px;background:#142130;border:1px solid #3e576c;border-radius:14px;box-shadow:0 16px 40px #0008}.backup-options>div{display:grid;gap:6px}.backup-options button{width:100%;text-align:left}.backup-options small{color:#a6bdcf;font-size:12px;line-height:1.5}
+button.danger{color:#ffb4b4;border-color:#8a3a3a}button.danger:hover{background:#3a1c22}
+.review-dialog{width:min(95vw,720px);max-height:88vh;overflow:auto;background:#142130;border:1px solid #3e576c;color:#e9f1f8}.review-dialog h2{margin:0}.review-dialog section{border-top:1px solid #29384a;padding-top:12px}.review-dialog h3{margin:0 0 4px;font-size:15px;color:#ffd28a}.review-dialog section p{margin:0 0 8px}.review-dialog ul{margin:0;padding-left:18px;display:grid;gap:3px;font-size:13px;columns:auto}.review-dialog .actions{display:flex;gap:10px;flex-wrap:wrap;position:sticky;bottom:-24px;background:#142130;padding:12px 0}
+@media(max-width:600px){.backup-options{position:static;width:100%;margin-top:8px}}

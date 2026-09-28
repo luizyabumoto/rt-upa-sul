@@ -43,7 +43,7 @@ export async function connectStore() {
       revision = data.revision; dirty = generation !== sentGeneration;
       status.textContent = dirty ? 'Há novas alterações para salvar' : 'Salvo online';
     } catch (error) {
-      status.textContent = error.message + ' Baixar backup preserva suas alterações. Se a sessão expirou, entre novamente em outra aba e tente salvar.';
+      status.textContent = error.message + ' Baixar cópia de segurança preserva suas alterações. Se a sessão expirou, entre novamente em outra aba e tente salvar.';
     } finally { saving = false; save.disabled = !dirty; logout.disabled = false; reload.disabled = false; if(dirty&&generation!==sentGeneration)autoTimer=setTimeout(()=>save.click(),900); }
   });
   reload.addEventListener('click', () => { if (!dirty || confirm('Há alterações não salvas. Descartá-las e carregar os dados online?')) location.reload(); });

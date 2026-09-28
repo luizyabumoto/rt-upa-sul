@@ -89,3 +89,35 @@ export function overlapIndex(seed,storage,dates){
  return result;
 }
 export function overlapMessage(conflict){return `⚠ HORÁRIO DUPLICADO: ${conflict.doctor.split(/CRM/i)[0].trim()} também está em ${slots[conflict.slot]} · ${conflict.date.split('-').reverse().join('/')} · ${hour(conflict.start)}–${hour(conflict.end)}.`;}
+
+// Conferência antes de exportar a quinzena. "Vaga" segue o mesmo critério do Excel
+// (export_excel.py): posto sem médico vira VAGO, exceto o "X" da planilha importada
+// (não previsto) quando ninguém alterou nem fixou aquele posto.
+const crmNumber=doctor=>(String(doctor||'').match(/CRM\D*(\d+)/i)||[])[1]||'';
+export function periodReview(seed,storage,dates){
+ const vacancies=[],vacations=[],absences=[],overlaps=[],seenOverlap=new Set(),byCrm=new Map();
+ const roster=parse(storage,'roster',[]),fixed=parse(storage,'fixed',[]),leaves=parse(storage,'absences',[]),index=overlapIndex(seed,storage,dates);
+ for(const date of dates){
+  const weekday=new Date(date+'T12:00:00').getDay(),edits=parse(storage,periodKey(date),{});
+  for(let slot=0;slot<14;slot++){
+   const parts=segments(seed,storage,date,slot);
+   if(parts.some(part=>!part.doctor)){
+    const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);
+    const overridden=Object.hasOwn(edits,`${date}|${slot}`)||roster.some(r=>r.start<=date&&r.weekday===weekday&&r.slot===slot)||fixed.some(r=>Number(r.weekday)===weekday&&Number(r.slot)===slot);
+    if(overridden||exact?.availability!=='not-scheduled')vacancies.push({date,slot});
+   }
+   for(const part of parts){
+    if(!part.doctor)continue;
+    for(const leave of vacationConflicts(storage,part.doctor,date,slot))vacations.push({date,slot,doctor:part.doctor,leave});
+    if(leaves.some(a=>a.doctor===part.doctor&&a.start<=date&&date<=a.end))absences.push({date,slot,doctor:part.doctor});
+    const crm=crmNumber(part.doctor);if(crm){if(!byCrm.has(crm))byCrm.set(crm,new Map());byCrm.get(crm).set(doctorIdentity(part.doctor),part.doctor);}
+   }
+   for(const other of index.get(`${date}|${slot}`)||[]){
+    const pair=[`${date}|${slot}`,`${other.date}|${other.slot}`].sort().join('~')+'~'+doctorIdentity(other.doctor);
+    if(!seenOverlap.has(pair)){seenOverlap.add(pair);overlaps.push({date,slot,other});}
+   }
+  }
+ }
+ const sharedCrm=[...byCrm].filter(([,names])=>names.size>1).map(([crm,names])=>({crm,doctors:[...names.values()]}));
+ return {vacancies,vacations,absences,overlaps,sharedCrm,total:vacancies.length+vacations.length+absences.length+overlaps.length+sharedCrm.length};
+}

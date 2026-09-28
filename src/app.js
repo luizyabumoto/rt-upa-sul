@@ -4,7 +4,7 @@ import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage} from './scheduling.js';
+import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
@@ -73,8 +73,10 @@ document.querySelector('#doctor-form').addEventListener('submit',event=>{event.p
 document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#absence-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),item={doctor:String(data.get('doctor')),start:String(data.get('start')),end:String(data.get('end'))};if(!item.doctor||item.start>item.end)return alert('Confira médico e período.');put('absences',[...get('absences',[]),item]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#generate').addEventListener('click',render);
-document.querySelector('#reset').addEventListener('click',()=>{if(confirm('Restaurar os dados iniciais desta quinzena? No modo online, use Salvar online para confirmar.')){storage.removeItem(`rt-upa:${storageKey()}`);render()}});
-document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
+document.querySelector('#reset').addEventListener('click',()=>{const count=Object.keys(get(storageKey(),{})).length,period=document.querySelector('#summary b')?.textContent||'esta quinzena';document.querySelector('.backup-menu').open=false;if(!count)return alert(`Nenhum ajuste feito à mão em ${period}. Nada para desfazer.`);if(confirm(`Desfazer ${count} ${count===1?'ajuste feito':'ajustes feitos'} à mão em ${period}?
+
+A quinzena volta para a escala importada e os fixos. Coberturas, férias e outras quinzenas não mudam. Não dá para desfazer esta ação — se tiver dúvida, baixe antes uma cópia de segurança.`)){storage.removeItem(`rt-upa:${storageKey()}`);render();document.dispatchEvent(new Event('rt-schedule-changed'))}});
+document.querySelector('#backup').addEventListener('click',()=>{const data={version:1,createdAt:new Date().toISOString(),items:{}};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))data.items[key]=storage.getItem(key)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`rt-upa-copia-${new Date().toISOString().slice(0,10)}.json`;a.click();document.querySelector('.backup-menu').open=false;setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 settings();render();
 mountOrganizer(storage,seed);
 mountScheduleView(storage,seed);
@@ -88,6 +90,40 @@ document.addEventListener("rt-data-restored",()=>{settings();render();});
 mountPush();
 
 document.querySelector('#restore').addEventListener('click',()=>document.querySelector('#restore-file').click());
-document.querySelector('#restore-file').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.version!==1||!data.items||typeof data.items!=='object'||Object.keys(data.items).some(key=>!key.startsWith('rt-upa:')||typeof data.items[key]!=='string'))throw new Error('Formato de backup inválido');if(!confirm('Restaurar este backup? Os registros com a mesma chave serão substituídos. No modo online, use Salvar online para confirmar.'))return;for(const [key,value] of Object.entries(data.items))storage.setItem(key,value);settings();render();document.dispatchEvent(new Event('rt-data-restored'))}catch(error){alert(`Não foi possível restaurar: ${error.message}`)}finally{event.target.value=''}});
+document.querySelector('#restore-file').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.version!==1||!data.items||typeof data.items!=='object'||Object.keys(data.items).some(key=>!key.startsWith('rt-upa:')||typeof data.items[key]!=='string'))throw new Error('Formato de backup inválido');document.querySelector('.backup-menu').open=false;const saved=/^\d{4}-\d{2}-\d{2}/.test(data.createdAt||'')?` de ${data.createdAt.slice(0,10).split('-').reverse().join('/')}`:'';if(!confirm(`Carregar a cópia${saved} (${Object.keys(data.items).length} registros)?
 
-document.querySelector('#excel').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:Number(document.querySelector('#year').value),month:Number(monthEl.value),half:Number(document.querySelector('#half').value),items})});if(!response.ok)throw new Error(response.status===501?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':await response.text());const blob=await response.blob();const match=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=match?.[1]||'escala-medica.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Exportar Excel oficial'}});
+Os dados atuais com o mesmo tipo serão trocados pelos do arquivo e salvos online. Se tiver dúvida, baixe antes uma cópia de segurança do estado atual.`))return;for(const [key,value] of Object.entries(data.items))storage.setItem(key,value);settings();render();document.dispatchEvent(new Event('rt-data-restored'))}catch(error){alert(`Não foi possível restaurar: ${error.message}`)}finally{event.target.value=''}});
+
+async function exportExcel(){const button=document.querySelector('#excel');button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:Number(document.querySelector('#year').value),month:Number(monthEl.value),half:Number(document.querySelector('#half').value),items})});if(!response.ok)throw new Error(response.status===501?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':await response.text());const blob=await response.blob();const match=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=match?.[1]||'escala-medica.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Exportar Excel oficial'}}
+// Conferência antes de exportar: mostra vagas, férias/afastamentos, choques de horário e CRMs
+// repetidos da quinzena. Exportar continua possível, mas só depois de ver a lista.
+const reviewDialog=document.createElement('dialog');reviewDialog.className='review-dialog';document.body.append(reviewDialog);
+const shortDate=date=>{const d=new Date(date+'T12:00:00');return `${WEEKDAYS[d.getDay()].slice(0,3)} ${date.slice(8,10)}/${date.slice(5,7)}`};
+const shortName=doctor=>String(doctor).split('\n')[0];
+function reviewSection(title,hint,lines){
+ if(!lines.length)return null;const section=document.createElement('section'),heading=document.createElement('h3'),help=document.createElement('p'),list=document.createElement('ul');
+ heading.textContent=`${title} · ${lines.length}`;help.textContent=hint;
+ for(const line of lines.slice(0,40)){const item=document.createElement('li');item.textContent=line;list.append(item)}
+ if(lines.length>40){const more=document.createElement('li');more.textContent=`… e mais ${lines.length-40}`;list.append(more)}
+ section.append(heading,help,list);return section;
+}
+document.querySelector('#excel').addEventListener('click',()=>{
+ let days;try{days=fortnight(Number(document.querySelector('#year').value),Number(monthEl.value),Number(document.querySelector('#half').value))}catch{return alert('Escolha um ano, mês e quinzena válidos.')}
+ const review=periodReview(seed,storage,days.map(d=>d.date)),period=`${days[0].day} a ${days.at(-1).day} de ${months[days[0].month-1]} de ${days[0].year}`;
+ reviewDialog.replaceChildren();const form=document.createElement('form');form.method='dialog';
+ const title=document.createElement('h2');title.textContent=review.total?`Conferência · ${period}`:`Tudo certo · ${period}`;
+ const intro=document.createElement('p');intro.textContent=review.total?'Confira os pontos abaixo antes de enviar a escala. Você pode voltar e corrigir, ou exportar assim mesmo — as vagas saem como VAGO na planilha.':'Nenhuma vaga, férias, afastamento, choque de horário ou CRM repetido nesta quinzena.';
+ form.append(title,intro);
+ for(const section of [
+  reviewSection('Vagas sem médico','Postos que vão sair como VAGO no Excel.',review.vacancies.map(v=>`${shortDate(v.date)} · ${slots[v.slot]}`)),
+  reviewSection('Médico em férias escalado','Férias cadastradas nas pendências.',review.vacations.map(v=>`${shortDate(v.date)} · ${slots[v.slot]} · ${shortName(v.doctor)}`)),
+  reviewSection('Médico afastado escalado','Afastamentos cadastrados em Médicos e fixos.',review.absences.map(v=>`${shortDate(v.date)} · ${slots[v.slot]} · ${shortName(v.doctor)}`)),
+  reviewSection('Choque de horário','O mesmo médico em dois postos ao mesmo tempo.',review.overlaps.map(o=>`${shortName(o.other.doctor)} · ${shortDate(o.date)} ${slots[o.slot]} × ${shortDate(o.other.date)} ${slots[o.other.slot]}`)),
+  reviewSection('CRM repetido','O mesmo CRM aparece com nomes diferentes. Corrija o cadastro.',review.sharedCrm.map(c=>`CRM ${c.crm} · ${c.doctors.map(shortName).join(' / ')}`))
+ ])if(section)form.append(section);
+ const actions=document.createElement('div');actions.className='actions';
+ const go=document.createElement('button');go.value='export';go.textContent=review.total?'Exportar assim mesmo':'Exportar Excel';
+ const back=document.createElement('button');back.value='cancel';back.className='secondary';back.textContent=review.total?'Voltar e corrigir':'Cancelar';
+ actions.append(go,back);form.append(actions);reviewDialog.append(form);
+ reviewDialog.onclose=()=>{if(reviewDialog.returnValue==='export')exportExcel()};reviewDialog.returnValue='';reviewDialog.showModal();(review.total?back:go).focus();
+});

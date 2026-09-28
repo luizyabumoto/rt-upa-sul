@@ -11,8 +11,8 @@ No Windows:
 Mantenha a janela do terminal aberta enquanto usa. Para encerrar, pressione Ctrl+C.
 Não abra index.html diretamente. A exportação só funciona iniciando com server.py.
 
-Os dados editados ficam apenas neste navegador/computador. Use "Baixar backup" após editar.
-Para restaurar em outra versão, use "Restaurar backup" e selecione o JSON salvo.
+Os dados editados ficam apenas neste navegador/computador. Use "Cópia de segurança › Baixar cópia de segurança" após editar.
+Para restaurar em outra versão, use "Cópia de segurança › Carregar cópia salva" e selecione o JSON salvo.
 A escala de outubro carrega os plantões da planilha enviada; outras quinzenas recebem apenas os fixos que você cadastrar.
 Os visitadores formam uma grade semanal fixa de segunda a domingo.
 
