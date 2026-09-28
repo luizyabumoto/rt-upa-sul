@@ -15,10 +15,11 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
+DEMANDA = None
 
 
 def parse_minuto(valor):
@@ -284,6 +285,19 @@ def app(environ, start_response):
             PRODUCAO = PRODUCAO or PainelProducao()
             try:
                 return respond(200, PRODUCAO.obter(inicio, fim))
+            except ValueError as error:
+                raise ApiError(400, str(error))
+        if path == '/api/demanda' and method == 'GET':
+            global DEMANDA
+            from urllib.parse import parse_qs
+            from gestor_saude import PainelDemanda
+            query = parse_qs(environ.get('QUERY_STRING', ''))
+            inicio = parse_minuto((query.get('inicio') or [''])[0])
+            fim_texto = (query.get('fim') or ['agora'])[0]
+            fim = None if fim_texto == 'agora' else parse_minuto(fim_texto)
+            DEMANDA = DEMANDA or PainelDemanda()
+            try:
+                return respond(200, DEMANDA.obter(inicio, fim))
             except ValueError as error:
                 raise ApiError(400, str(error))
         if path.startswith('/api/push/') and method == 'POST':

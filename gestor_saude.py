@@ -251,12 +251,14 @@ class GestorSaude:
             self.tipos = resultado
         return self.tipos
 
-    def producao(self, inicio, fim):
+    def producao(self, inicio, fim, chaves=None):
         """Atendimentos do relatório Produção Analítico (formato 2 = dados), só médico, horário e classificação.
         O Gestor Saúde aceita no máximo 31 dias por consulta; períodos maiores são lidos em partes."""
         def ler():
             linhas = {}
             for chave, (tipo, cbo) in self._tipos_producao().items():
+                if chaves and chave not in chaves:
+                    continue
                 linhas[chave] = []
                 parte = inicio
                 while parte < fim:
@@ -347,4 +349,48 @@ class PainelProducao:
             if len(self.cache) > 40:
                 self.cache.clear()
             self.cache[chave] = (self.relogio() + (120 if aberto else 6 * 3600), resultado)
+            return resultado
+
+
+def resumir_demanda(linhas):
+    """Consultas por hora (adulto e pediatria), para a análise de demanda. Só contagens."""
+    horas = {}
+    for chave, atendimentos in linhas.items():
+        for _, momento, _ in atendimentos:
+            hora = horas.setdefault(momento.strftime('%Y-%m-%dT%H'), {'adulto': 0, 'pediatria': 0})
+            hora[chave] += 1
+    return horas
+
+
+class PainelDemanda:
+    """Demanda por hora em janelas de até 32 dias. A tela junta as janelas; períodos encerrados ficam 6 h em cache."""
+    LIMITE_DIAS = 32
+
+    def __init__(self, cliente=None, relogio=time.time):
+        self.cliente = cliente or cliente_compartilhado()
+        self.relogio = relogio
+        self.cache = {}
+        self.trava = threading.Lock()
+
+    def obter(self, inicio, fim=None):
+        agora = datetime.fromtimestamp(self.relogio(), CUIABA).replace(second=0, microsecond=0)
+        fim = min(fim or agora, agora)
+        if inicio >= fim:
+            raise ValueError('O início precisa ser antes do fim.')
+        if fim - inicio > timedelta(days=self.LIMITE_DIAS):
+            raise ValueError(f'Peça no máximo {self.LIMITE_DIAS} dias por vez.')
+        aberto = agora - fim < timedelta(minutes=5)
+        chave = (inicio.isoformat(), 'agora' if aberto else fim.isoformat())
+        with self.trava:
+            guardado = self.cache.get(chave)
+            if guardado and self.relogio() < guardado[0]:
+                return guardado[1]
+            try:
+                resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
+                             'horas': resumir_demanda(self.cliente.producao(inicio, fim, chaves=('adulto', 'pediatria')))}
+            except GestorSaudeError as erro:
+                return {'disponivel': False, 'erro': str(erro), 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto, 'horas': {}}
+            if len(self.cache) > 60:
+                self.cache.clear()
+            self.cache[chave] = (self.relogio() + (300 if aberto else 6 * 3600), resultado)
             return resultado

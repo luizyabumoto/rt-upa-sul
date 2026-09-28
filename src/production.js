@@ -98,6 +98,43 @@ export function escalados(seed, storage, data, turno) {
  return nomes;
 }
 
+// Plantões (início às 07h ou 19h) que começam dentro do período, no horário de Cuiabá.
+export function plantoesDoPeriodo(inicio, fim) {
+ const lista = [], limite = new Date(fim.slice(0, 16) + ':00Z');
+ let atual = new Date(inicio.slice(0, 16) + ':00Z');
+ const hora = atual.getUTCHours();
+ atual.setUTCMinutes(0, 0, 0);
+ if (hora < 7) { atual.setUTCDate(atual.getUTCDate() - 1); atual.setUTCHours(19); } else if (hora < 19) atual.setUTCHours(7); else atual.setUTCHours(19);
+ for (; atual < limite && lista.length < 400; atual = new Date(atual.getTime() + 12 * HORA)) {
+  lista.push({data: atual.toISOString().slice(0, 10), turno: atual.getUTCHours() === 7 ? 'D' : 'N'});
+ }
+ return lista;
+}
+
+// Escala × produção por médico. escalas: [{data, turno, nomes: [...]}] (consultórios); registros: produção por plantão.
+export function cruzamento(registros, escalas) {
+ const linhas = [];
+ const linha = nome => {
+  let l = linhas.find(x => mesmoMedico(x.medico, nome));
+  if (!l) { l = {medico: nome, escalados: 0, comConsulta: 0, semConsulta: [], consultasEscalado: 0, consultasFora: 0}; linhas.push(l); }
+  return l;
+ };
+ const escaladoEm = new Set();
+ for (const plantao of escalas) for (const nome of plantao.nomes) {
+  const l = linha(nome); l.escalados += 1;
+  const feito = registros.filter(r => r.data === plantao.data && r.turno === plantao.turno && mesmoMedico(r.medico, nome)).reduce((s, r) => s + consultas(r), 0);
+  escaladoEm.add(`${plantao.data}${plantao.turno}|${l.medico}`);
+  if (feito) { l.comConsulta += 1; l.consultasEscalado += feito; } else l.semConsulta.push(plantao);
+ }
+ for (const r of registros) {
+  if (!consultas(r)) continue;
+  const l = linha(r.medico);
+  if (!escaladoEm.has(`${r.data}${r.turno}|${l.medico}`)) l.consultasFora += consultas(r);
+ }
+ return linhas.map(l => ({...l, mediaEscalado: l.escalados ? Math.round(l.consultasEscalado / l.escalados) : 0}))
+  .sort((a, b) => b.escalados - a.escalados || b.consultasEscalado - a.consultasEscalado || a.medico.localeCompare(b.medico, 'pt-BR'));
+}
+
 export function csv(lista, rotuloPeriodo) {
  const cabecalho = ['Posição', 'Médico', 'Consultas', 'Adulto', 'Pediatria', 'Plantões', 'Média por plantão', ...CLASSES.map(c => c[1]), 'Retornos baixados (não contam)'];
  const linhas = lista.map((m, i) => [i + 1, m.medico, m.total, m.adulto, m.pediatria, m.plantoes, m.mediaPlantao, ...CLASSES.map(c => m.classes[c[0]] || 0), m.retornos]);
@@ -183,6 +220,28 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
+ function tabelaCruzamento() {
+  const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
+  const linhas = cruzamento(dados.registros || [], escalas);
+  const box = el('section', 'prod-section');
+  box.append(el('h3', '', 'Escala × produção'), el('p', 'chart-sub', `${escalas.length} plantões no período · consultórios adulto e pediátrico da escala comparados com as consultas registradas no Gestor Saúde.`));
+  const tabela = el('table', 'prod-table'), head = el('tr');
+  for (const [t, cls] of [['Médico'], ['Plantões na escala', 'num'], ['Com consultas', 'num'], ['Sem consultas', 'num'], ['Consultas nos plantões', 'num'], ['Média por plantão', 'num'], ['Consultas fora da escala', 'num']]) head.append(el('th', cls || '', t));
+  const thead = el('thead'); thead.append(head); tabela.append(thead);
+  const body = el('tbody');
+  for (const l of linhas) {
+   const tr = el('tr'), nome = el('td'); nome.append(botaoMedico(l.medico));
+   const sem = el('td', `num${l.semConsulta.length ? ' alerta' : ''}`, String(l.semConsulta.length));
+   if (l.semConsulta.length) sem.title = 'Plantões na escala sem consulta registrada: ' + l.semConsulta.map(p => `${dataBR(p.data)} ${p.turno === 'D' ? 'diurno' : 'noturno'}`).join(', ');
+   tr.append(nome, el('td', 'num strong', String(l.escalados)), el('td', 'num', String(l.comConsulta)), sem, el('td', 'num', String(l.consultasEscalado)), el('td', 'num', String(l.mediaEscalado)), el('td', `num${l.consultasFora ? ' strong' : ' muted'}`, String(l.consultasFora)));
+   body.append(tr);
+  }
+  tabela.append(body);
+  const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  box.append(wrap, el('small', 'muted', '"Sem consultas": escalado sem nenhuma consulta registrada naquele plantão (passe o mouse no número para ver as datas). Pode ser troca, cobertura não registrada ou plantão no Box. "Fora da escala": consultas em plantões em que o médico não estava nos consultórios da escala.'));
+  return box;
+ }
+
  function cartaoEscala() {
   const box = $('.prod-escala'); box.replaceChildren();
   const chave = $('.prod-period').value;
@@ -225,7 +284,7 @@ export function mountProduction(storage, seed) {
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
   if (agrupamento !== 'total') tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking());
+  tabelas.append(tabelaRanking(), tabelaCruzamento());
  }
 
  async function carregar() {

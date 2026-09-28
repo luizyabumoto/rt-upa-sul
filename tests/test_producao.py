@@ -148,3 +148,28 @@ class RotaProducaoTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DemandaTests(unittest.TestCase):
+    def test_conta_consultas_por_hora_sem_retornos(self):
+        from gestor_saude import resumir_demanda
+        linhas = {'adulto': [('ANA', h('2026-09-28T08:05'), 'URGENTE'), ('BIA', h('2026-09-28T08:50'), 'URGENTE')],
+                  'pediatria': [('CARLA', h('2026-09-28T08:10'), 'URGENTE'), ('CARLA', h('2026-09-29T02:00'), 'URGENTE')]}
+        self.assertEqual(resumir_demanda(linhas), {'2026-09-28T08': {'adulto': 2, 'pediatria': 1}, '2026-09-29T02': {'adulto': 0, 'pediatria': 1}})
+
+    def test_cliente_le_so_consultas_e_painel_limita_32_dias(self):
+        from gestor_saude import PainelDemanda
+        fake = FakeRelatorio([{'tipo': 1, 'medico': 'ANA', 'dataAtendimento': '2026-09-10T09:00:00'},
+                              {'tipo': 3, 'medico': 'ROBO', 'dataAtendimento': '2026-09-10T09:30:00'}])
+        cliente = GestorSaude({'GESTOR_SAUDE_USUARIO': 'u', 'GESTOR_SAUDE_SENHA': 's'}, abrir=fake, relogio=lambda: 1_900_000_000)
+        painel = PainelDemanda(cliente, relogio=lambda: h('2026-09-28T16:40').timestamp())
+        r = painel.obter(h('2026-09-01T07:00'), h('2026-10-01T07:00'))
+        self.assertEqual(r['horas'], {'2026-09-10T09': {'adulto': 1, 'pediatria': 0}})
+        self.assertEqual({p[0] for p in fake.periodos}, {1, 2}, 'retornos (tipos 3 e 4) não são consultados')
+        with self.assertRaises(ValueError):
+            painel.obter(h('2026-07-01T07:00'), h('2026-09-01T07:00'))
+
+    def test_rota_exige_login(self):
+        with patch('online.remote', side_effect=provider):
+            self.assertEqual(request('/api/demanda?inicio=2026-09-01T07:00')['status'], 401)
+            self.assertEqual(request('/src/demand.js')['status'], 401)
