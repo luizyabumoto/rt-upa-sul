@@ -150,6 +150,53 @@ export function cruzamento(registros, escalas) {
   .sort((a, b) => b.escalados - a.escalados || b.consultasEscalado - a.consultasEscalado || a.medico.localeCompare(b.medico, 'pt-BR'));
 }
 
+// Duração real de cada plantão para "por hora": diurno 12 h, noturno 12 h.
+const HORAS_PLANTAO = 12;
+const diaSemana = data => new Date(data + 'T12:00:00Z').getUTCDay();
+const NOMES_DIA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+// Um resumo por plantão (data+turno): total de consultas, médicos que atenderam, média por médico e por hora.
+export function plantoes(registros) {
+ const mapa = new Map();
+ for (const r of registros) {
+  const chave = `${r.data}${r.turno}`;
+  const p = mapa.get(chave) || {data: r.data, turno: r.turno, total: 0, medicos: 0};
+  if (consultas(r)) { p.total += consultas(r); p.medicos += 1; }
+  mapa.set(chave, p);
+ }
+ return [...mapa.values()].filter(p => p.total).map(p => ({...p,
+  porMedico: p.medicos ? p.total / p.medicos : 0,
+  porMedicoHora: p.medicos ? p.total / p.medicos / HORAS_PLANTAO : 0}))
+  .sort((a, b) => a.data.localeCompare(b.data) || a.turno.localeCompare(b.turno));
+}
+
+// Equipes agrupadas por dia da semana + turno (ex.: "Segunda · diurno"), com médias por plantão e por médico.
+export function equipes(registros) {
+ const lista = plantoes(registros), mapa = new Map();
+ for (const p of lista) {
+  const chave = `${diaSemana(p.data)}${p.turno}`;
+  const e = mapa.get(chave) || {weekday: diaSemana(p.data), turno: p.turno, plantoes: 0, total: 0, medicos: 0};
+  e.plantoes += 1; e.total += p.total; e.medicos += p.medicos;
+  mapa.set(chave, e);
+ }
+ return [...mapa.values()].map(e => ({
+  nome: `${NOMES_DIA[e.weekday]} · ${e.turno === 'D' ? 'diurno' : 'noturno'}`,
+  weekday: e.weekday, turno: e.turno, plantoes: e.plantoes, total: e.total,
+  mediaPorPlantao: e.plantoes ? e.total / e.plantoes : 0,
+  mediaMedicos: e.plantoes ? e.medicos / e.plantoes : 0,
+  porMedico: e.medicos ? e.total / e.medicos : 0,
+  porMedicoHora: e.medicos ? e.total / e.medicos / HORAS_PLANTAO : 0,
+ })).sort((a, b) => b.porMedico - a.porMedico || b.mediaPorPlantao - a.mediaPorPlantao);
+}
+
+// Média geral da unidade por plantão e por médico, no período.
+export function mediaUnidade(registros) {
+ const lista = plantoes(registros);
+ if (!lista.length) return {plantoes: 0, mediaPorPlantao: 0, porMedico: 0, porMedicoHora: 0};
+ const total = lista.reduce((s, p) => s + p.total, 0), medicos = lista.reduce((s, p) => s + p.medicos, 0);
+ return {plantoes: lista.length, mediaPorPlantao: total / lista.length, porMedico: medicos ? total / medicos : 0, porMedicoHora: medicos ? total / medicos / HORAS_PLANTAO : 0};
+}
+
 export function csv(lista, rotuloPeriodo) {
  const cabecalho = ['Posição', 'Médico', 'Consultas', 'Adulto', 'Pediatria', 'Plantões', 'Média por plantão', ...CLASSES.map(c => c[1]), 'Retornos baixados (não contam)'];
  const linhas = lista.map((m, i) => [i + 1, m.medico, m.total, m.adulto, m.pediatria, m.plantoes, m.mediaPlantao, ...CLASSES.map(c => m.classes[c[0]] || 0), m.retornos]);
@@ -237,6 +284,29 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
+ function tabelaEquipes() {
+  const um = n => Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+  const lista = equipes(dados.registros || []), media = mediaUnidade(dados.registros || []);
+  const box = el('section', 'prod-section');
+  box.append(el('h3', '', 'Desempenho das equipes'), el('p', 'chart-sub', 'Equipes por dia da semana e turno, ordenadas por consultas por médico. Média da unidade no período: ' + `${um(media.mediaPorPlantao)} consultas por plantão · ${um(media.porMedico)} por médico · ${um(media.porMedicoHora)} por médico/hora.`));
+  if (!lista.length) { box.append(el('p', 'notice', 'Sem plantões com consulta no período.')); return box; }
+  const tabela = el('table', 'prod-table'), head = el('tr');
+  for (const [t, cls] of [['#'], ['Equipe'], ['Plantões', 'num'], ['Consultas/plantão', 'num'], ['Médicos/plantão', 'num'], ['Consultas/médico', 'num'], ['Por médico/hora', 'num']]) head.append(el('th', cls || '', t));
+  const thead = el('thead'); thead.append(head); tabela.append(thead);
+  const corpo = el('tbody'), maxMed = Math.max(...lista.map(e => e.porMedico));
+  lista.forEach((e, i) => {
+   const tr = el('tr'); if (i === 0) tr.className = 'destaque';
+   tr.append(el('td', 'pos', String(i + 1)), el('td', 'strong', e.nome), el('td', 'num', String(e.plantoes)),
+    el('td', 'num', um(e.mediaPorPlantao)), el('td', 'num', um(e.mediaMedicos)),
+    el('td', 'num strong', um(e.porMedico)), el('td', 'num', um(e.porMedicoHora)));
+   corpo.append(tr);
+  });
+  tabela.append(corpo);
+  const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  box.append(wrap, el('small', 'muted', 'Consultas/médico = total de consultas do plantão ÷ médicos que atenderam, na média dos plantões daquele dia e turno. É a medida mais justa entre equipes de tamanhos diferentes.'));
+  return box;
+ }
+
  function tabelaCruzamento() {
   const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
   const linhas = cruzamento(dados.registros || [], escalas);
@@ -306,7 +376,7 @@ export function mountProduction(storage, seed) {
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
   if (agrupamento !== 'total') tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking(), tabelaCruzamento());
+  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaCruzamento());
  }
 
  async function carregar() {

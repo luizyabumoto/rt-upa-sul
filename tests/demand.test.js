@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {periodoDemanda, janelas, analisar, medicosPorHora, pressaoPorHora} from '../src/demand.js';
-import {plantoesDoPeriodo, cruzamento, periodoComparado, variacao} from '../src/production.js';
+import {plantoesDoPeriodo, cruzamento, periodoComparado, variacao, equipes, mediaUnidade, plantoes} from '../src/production.js';
 
 const em = local => new Date(`${local}:00-04:00`);
 
@@ -82,4 +82,36 @@ test('comparação: período anterior e mesmo período do ano passado', () => {
  assert.equal(variacao(120, 100), '+20%');
  assert.equal(variacao(80, 100), '-20%');
  assert.equal(variacao(10, 0), 'novo');
+});
+
+test('equipes por dia da semana e turno, e média da unidade', () => {
+ // 2 segundas diurnas (06/10 e 13/10/2026) e 1 terça diurna (07/10).
+ const registros = [
+  {data: '2026-10-06', turno: 'D', medico: 'A', adulto: 30, pediatria: 0, retornos: 0, classes: {}},
+  {data: '2026-10-06', turno: 'D', medico: 'B', adulto: 30, pediatria: 0, retornos: 0, classes: {}},
+  {data: '2026-10-13', turno: 'D', medico: 'A', adulto: 50, pediatria: 0, retornos: 0, classes: {}},
+  {data: '2026-10-13', turno: 'D', medico: 'C', adulto: 50, pediatria: 0, retornos: 0, classes: {}},
+  {data: '2026-10-07', turno: 'D', medico: 'A', adulto: 20, pediatria: 0, retornos: 0, classes: {}},
+ ];
+ const e = Object.fromEntries(equipes(registros).map(x => [x.nome, x]));
+ const ter = e['Terça · diurno'];                 // 06 e 13/10/2026 são terças
+ assert.equal(ter.plantoes, 2);
+ assert.equal(ter.mediaPorPlantao, 80);      // (60 + 100) / 2
+ assert.equal(ter.mediaMedicos, 2);
+ assert.equal(ter.porMedico, 40);            // 160 consultas / 4 médicos
+ // Ranking por consultas/médico: terça (40) na frente da quarta (20).
+ assert.deepEqual(equipes(registros).map(x => x.nome), ['Terça · diurno', 'Quarta · diurno']);
+ const u = mediaUnidade(registros);
+ assert.equal(u.plantoes, 3);
+ assert.equal(u.porMedico, 36);              // 180 consultas / 5 médicos-plantão
+});
+
+test('plantoes: total, médicos e por médico/hora; plantão sem consulta some', () => {
+ const registros = [
+  {data: '2026-10-06', turno: 'N', medico: 'A', adulto: 24, pediatria: 0, retornos: 5, classes: {}},
+  {data: '2026-10-06', turno: 'N', medico: 'B', adulto: 0, pediatria: 0, retornos: 9, classes: {}},
+ ];
+ const p = plantoes(registros);
+ assert.equal(p.length, 1);
+ assert.deepEqual([p[0].total, p[0].medicos, p[0].porMedico, p[0].porMedicoHora], [24, 1, 24, 2]);
 });

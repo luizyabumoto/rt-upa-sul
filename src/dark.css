@@ -139,3 +139,4 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
  body.imprimindo-producao .prod-section{break-inside:avoid}
  @page{size:A4 landscape;margin:12mm}
 }
+.prod-table tr.destaque td{background:#12303a!important}.prod-table tr.destaque td.strong,.prod-table tr.destaque td.pos{color:#7ee5cf}
