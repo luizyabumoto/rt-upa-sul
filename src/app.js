@@ -4,7 +4,7 @@ import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots} from './scheduling.js';
+import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
@@ -14,6 +14,8 @@ try { storage = await connectStore(); } catch(error) { document.querySelector('m
 const seedResponse = await fetch('/src/seed.json',{cache:'no-store'});
 if (!seedResponse.ok) { document.querySelector('main').textContent = 'Não foi possível carregar a escala. Entre novamente e recarregue a página.'; throw new Error('Seed indisponível'); }
 const seed = await seedResponse.json();
+// Nomes, CRMs e vínculos salvos antes do cadastro único passam para a forma padronizada.
+canonicalizeStorage(storage);
 const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const slotNames=['Diurno · Clínico 1','Diurno · Clínico 2','Diurno · Clínico 3','Diurno · Clínico 4','Diurno · Pediatria 1','Diurno · Pediatria 2','Diurno · Box','Noturno · Clínico 1','Noturno · Clínico 2','Noturno · Clínico 3','Noturno · Clínico 4','Noturno · Pediatria 1','Noturno · Pediatria 2','Noturno · Box','Cinderela · 12h–18h','Cinderela · 18h–00h'];
 const source=new Map(seed.assignments.map(a=>[`${a.date}|${a.slot}`,a.doctor]));
@@ -22,7 +24,7 @@ const put=(key,value)=>storage.setItem(`rt-upa:${key}`,JSON.stringify(value));
 const monthEl=document.querySelector('#month');months.forEach((m,i)=>monthEl.add(new Option(m,i+1)));monthEl.value='10';
 WEEKDAYS.forEach((day,i)=>document.querySelector('#fixed-weekday').add(new Option(day,i)));
 slotNames.forEach((name,i)=>document.querySelector('#fixed-slot').add(new Option(name,i)));
-function doctors(){return ['',...new Set([...seed.physicians,...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function doctors(){return ['',...doctorChoices(seed,storage)]}
 const label=d=>d?d.replace(/\n/g,' · '):'— Vago —';
 function fillDoctorSelect(select){const selected=select.value;select.replaceChildren();for(const doctor of doctors())select.add(new Option(label(doctor),doctor));select.value=selected||''}
 function weekdayDoctor(weekday,slot){const date=fortnight(2026,10,1).find(d=>d.weekday===weekday);return date?source.get(`${date.date}|${slot}`)||'':''}
@@ -45,7 +47,7 @@ function renderVisitors(){
   for(const weekday of order){const td=document.createElement('td'),key=`${weekday}|${line}`,base=seed.visits.find(v=>v.weekday===weekday&&v.line===line)?.doctor ?? '',selected=Object.hasOwn(edits,key)?edits[key]:base;
    if(selected!==base)td.classList.add('changed');if(!selected)td.classList.add('empty');
    const select=document.createElement('select');select.setAttribute('aria-label',`Visitador ${line+1}, ${WEEKDAYS[weekday]}`);
-   const options=selected&&!doctors().includes(selected)?[...doctors(),selected]:doctors();for(const doctor of options)select.add(new Option(label(doctor),doctor));select.value=selected;
+   const options=['',...doctorOptions(doctors().slice(1),selected)];for(const doctor of options)select.add(new Option(label(doctor),doctor));select.value=selected;
    select.addEventListener('change',()=>{const storage='visits:weekly',update=get(storage,{});if(select.value===base)delete update[key];else update[key]=select.value;put(storage,update);renderVisitors()});td.append(select);row.append(td)
   }body.append(row)
  }
@@ -57,7 +59,7 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  const overlaps=overlapIndex(seed,storage,days.map(d=>d.date));const body=document.querySelector('#body');body.replaceChildren();let changed=0,alerts=0,duplicatePosts=0;
  slotNames.slice(0,14).forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name+(slot<7?" · 07h–19h · 12h":" · 19h–07h · 12h");row.append(title);
  for(const day of days){const td=document.createElement('td');const key=`${day.date}|${slot}`;const base=baseline(day.date,slot,day.weekday);const selected=Object.hasOwn(edits,key)?edits[key]:base;if(selected!==base){td.classList.add('changed');changed++}if(!selected)td.classList.add('empty');const select=document.createElement('select');select.setAttribute('aria-label',`${name} em ${day.date}`);
- const options=selected&&!doctors().includes(selected)?[...doctors(),selected]:doctors();for(const doctor of options)select.add(new Option((vacationConflicts(storage,doctor,day.date,slot).length?'⚠ EM FÉRIAS · ':'')+label(doctor),doctor));select.value=selected;
+ const options=['',...doctorOptions(doctors().slice(1),selected)];for(const doctor of options)select.add(new Option((vacationConflicts(storage,doctor,day.date,slot).length?'⚠ EM FÉRIAS · ':'')+label(doctor),doctor));select.value=selected;
  select.addEventListener('change',()=>{const update=get(storageKey(),{});if(select.value===base)delete update[key];else update[key]=select.value;put(storageKey(),update);document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(select);
  const covers=segments(seed,storage,day.date,slot).filter(x=>x.coverage);if(covers.length){if(selected===base)changed++;select.value=covers[0].doctor;select.disabled=true;const note=document.createElement('small');note.textContent='Cobertura: '+covers.map(x=>x.doctor.replaceAll('\n',' · ')).join(' / ');td.append(note);td.classList.add('changed');}
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
@@ -69,7 +71,7 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  document.querySelector('#count').textContent=`${changed} alterações`;document.querySelector('#alerts').textContent=`${alerts} conflitos com afastamento · ${duplicatePosts} postos com choque de horário`;
 }
 document.querySelector('#doctor-form').elements.name.addEventListener('input',event=>event.target.setCustomValidity(''));
-document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);if(!String(data.get('name')).trim()){event.currentTarget.elements.name.setCustomValidity('Informe o nome do médico.');event.currentTarget.elements.name.reportValidity();return;}const doctor=`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`;put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
+document.querySelector('#doctor-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget);if(!String(data.get('name')).trim()){event.currentTarget.elements.name.setCustomValidity('Informe o nome do médico.');event.currentTarget.elements.name.reportValidity();return;}const doctor=canonicalDoctor(`${String(data.get('name')).trim().toUpperCase()}\nCRM ${String(data.get('crm')).trim()} - ${data.get('affiliation')}`);put('doctors',[...new Set([...get('doctors',[]),...get('roster',[]).map(x=>x.doctor).filter(Boolean),doctor])]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#fixed-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),rule={weekday:Number(data.get('weekday')),slot:Number(data.get('slot')),doctor:String(data.get('doctor'))};if(!rule.doctor)return alert('Selecione o médico.');const rules=get('fixed',[]).filter(r=>!(r.weekday===rule.weekday&&r.slot===rule.slot));rules.push(rule);put('fixed',rules);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#absence-form').addEventListener('submit',event=>{event.preventDefault();const data=new FormData(event.currentTarget),item={doctor:String(data.get('doctor')),start:String(data.get('start')),end:String(data.get('end'))};if(!item.doctor||item.start>item.end)return alert('Confira médico e período.');put('absences',[...get('absences',[]),item]);event.currentTarget.reset();settings();document.dispatchEvent(new Event('rt-schedule-changed'))});
 document.querySelector('#generate').addEventListener('click',render);
@@ -112,14 +114,15 @@ document.querySelector('#excel').addEventListener('click',()=>{
  const review=periodReview(seed,storage,days.map(d=>d.date)),period=`${days[0].day} a ${days.at(-1).day} de ${months[days[0].month-1]} de ${days[0].year}`;
  reviewDialog.replaceChildren();const form=document.createElement('form');form.method='dialog';
  const title=document.createElement('h2');title.textContent=review.total?`Conferência · ${period}`:`Tudo certo · ${period}`;
- const intro=document.createElement('p');intro.textContent=review.total?'Confira os pontos abaixo antes de enviar a escala. Você pode voltar e corrigir, ou exportar assim mesmo — as vagas saem como VAGO na planilha.':'Nenhuma vaga, férias, afastamento, choque de horário ou CRM repetido nesta quinzena.';
+ const intro=document.createElement('p');intro.textContent=review.total?'Confira os pontos abaixo antes de enviar a escala. Você pode voltar e corrigir, ou exportar assim mesmo — as vagas saem como VAGO na planilha.':'Nenhuma vaga, férias, afastamento, choque de horário ou problema de CRM nesta quinzena.';
  form.append(title,intro);
  for(const section of [
   reviewSection('Vagas sem médico','Postos que vão sair como VAGO no Excel.',review.vacancies.map(v=>`${shortDate(v.date)} · ${slots[v.slot]}`)),
   reviewSection('Médico em férias escalado','Férias cadastradas nas pendências.',review.vacations.map(v=>`${shortDate(v.date)} · ${slots[v.slot]} · ${shortName(v.doctor)}`)),
   reviewSection('Médico afastado escalado','Afastamentos cadastrados em Médicos e fixos.',review.absences.map(v=>`${shortDate(v.date)} · ${slots[v.slot]} · ${shortName(v.doctor)}`)),
   reviewSection('Choque de horário','O mesmo médico em dois postos ao mesmo tempo.',review.overlaps.map(o=>`${shortName(o.other.doctor)} · ${shortDate(o.date)} ${slots[o.slot]} × ${shortDate(o.other.date)} ${slots[o.other.slot]}`)),
-  reviewSection('CRM repetido','O mesmo CRM aparece com nomes diferentes. Corrija o cadastro.',review.sharedCrm.map(c=>`CRM ${c.crm} · ${c.doctors.map(shortName).join(' / ')}`))
+  reviewSection('CRM repetido','O mesmo CRM aparece com nomes diferentes. Corrija o cadastro.',review.sharedCrm.map(c=>`CRM ${c.crm} · ${c.doctors.map(shortName).join(' / ')}`)),
+  reviewSection('CRM a confirmar','Médicos escalados sem número de CRM. Informe o CRM correto no cadastro.',review.missingCrm.map(shortName))
  ])if(section)form.append(section);
  const actions=document.createElement('div');actions.className='actions';
  const go=document.createElement('button');go.value='export';go.textContent=review.total?'Exportar assim mesmo':'Exportar Excel';

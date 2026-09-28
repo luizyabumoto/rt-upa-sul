@@ -7,11 +7,12 @@ import {fortnight} from '../src/calendar.js';
 const seed = JSON.parse(readFileSync(new URL('../src/seed.json', import.meta.url), 'utf8'));
 const OCTOBER = fortnight(2026, 10, 1).map(day => day.date);
 
-test('conferência da 1ª quinzena de outubro aponta as vagas do Box noturno e os CRMs repetidos', () => {
+test('conferência da 1ª quinzena de outubro aponta as vagas do Box noturno e o CRM a confirmar', () => {
  const review = periodReview(seed, new MemoryStore(), OCTOBER);
  assert.deepEqual(review.vacancies.map(v => `${v.date}|${v.slot}`), ['2026-10-03|13', '2026-10-06|13', '2026-10-07|13', '2026-10-10|13', '2026-10-14|13']);
- assert.deepEqual(review.sharedCrm.map(c => c.crm).sort(), ['11745', '13940', '17422']);
- assert.equal(review.total, review.vacancies.length + review.vacations.length + review.absences.length + review.overlaps.length + review.sharedCrm.length);
+ assert.deepEqual(review.sharedCrm, []);
+ assert.deepEqual(review.missingCrm.map(d => d.split('\n')[0]), ['JOSÉ PEDRO MARCHRY VACARI']);
+ assert.equal(review.total, review.vacancies.length + review.vacations.length + review.absences.length + review.overlaps.length + review.sharedCrm.length + review.missingCrm.length);
 });
 
 test('preencher a vaga tira da lista; afastamento e férias do médico escalado aparecem', () => {

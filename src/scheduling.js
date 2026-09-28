@@ -95,7 +95,7 @@ export function overlapMessage(conflict){return `⚠ HORÁRIO DUPLICADO: ${confl
 // (não previsto) quando ninguém alterou nem fixou aquele posto.
 const crmNumber=doctor=>(String(doctor||'').match(/CRM\D*(\d+)/i)||[])[1]||'';
 export function periodReview(seed,storage,dates){
- const vacancies=[],vacations=[],absences=[],overlaps=[],seenOverlap=new Set(),byCrm=new Map();
+ const vacancies=[],vacations=[],absences=[],overlaps=[],seenOverlap=new Set(),byCrm=new Map(),missing=new Map();
  const roster=parse(storage,'roster',[]),fixed=parse(storage,'fixed',[]),leaves=parse(storage,'absences',[]),index=overlapIndex(seed,storage,dates);
  for(const date of dates){
   const weekday=new Date(date+'T12:00:00').getDay(),edits=parse(storage,periodKey(date),{});
@@ -110,7 +110,7 @@ export function periodReview(seed,storage,dates){
     if(!part.doctor)continue;
     for(const leave of vacationConflicts(storage,part.doctor,date,slot))vacations.push({date,slot,doctor:part.doctor,leave});
     if(leaves.some(a=>a.doctor===part.doctor&&a.start<=date&&date<=a.end))absences.push({date,slot,doctor:part.doctor});
-    const crm=crmNumber(part.doctor);if(crm){if(!byCrm.has(crm))byCrm.set(crm,new Map());byCrm.get(crm).set(doctorIdentity(part.doctor),part.doctor);}
+    const crm=crmNumber(part.doctor);if(!crm)missing.set(doctorIdentity(part.doctor),part.doctor);if(crm){if(!byCrm.has(crm))byCrm.set(crm,new Map());byCrm.get(crm).set(doctorIdentity(part.doctor),part.doctor);}
    }
    for(const other of index.get(`${date}|${slot}`)||[]){
     const pair=[`${date}|${slot}`,`${other.date}|${other.slot}`].sort().join('~')+'~'+doctorIdentity(other.doctor);
@@ -119,5 +119,52 @@ export function periodReview(seed,storage,dates){
   }
  }
  const sharedCrm=[...byCrm].filter(([,names])=>names.size>1).map(([crm,names])=>({crm,doctors:[...names.values()]}));
- return {vacancies,vacations,absences,overlaps,sharedCrm,total:vacancies.length+vacations.length+absences.length+overlaps.length+sharedCrm.length};
+ const missingCrm=[...missing.values()];
+ return {vacancies,vacations,absences,overlaps,sharedCrm,missingCrm,total:vacancies.length+vacations.length+absences.length+overlaps.length+sharedCrm.length+missingCrm.length};
+}
+
+// Cadastro único por médico. O texto "NOME\nCRM número - VÍNCULO" continua sendo o formato
+// gravado (a planilha oficial depende dele), mas nome, CRM e vínculo são padronizados e o
+// mesmo médico aparece uma vez só nas listas; o vínculo é escolhido em cada plantão.
+export const AFFILIATIONS=['SMS','COAPH','EXTRA SMS'];
+const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges:'BLAYRA BORGES BARBOSA'};
+// CRM 17422 é da Ingrid; o do José Pedro estava repetido e ainda precisa ser informado.
+const CRM_FIXES={josepedromarchryvacari:{from:'17422',to:''}};
+export const MISSING_CRM='A CONFIRMAR';
+const DOCTOR_TEXT=/^[^\n]+\nCRM\s*(\d+|A CONFIRMAR)?\s*-?\s*(EXTRA\s*SMS|COAPH|SMS)?\s*$/i;
+export function canonicalDoctor(doctor){
+ if(typeof doctor!=='string'||!DOCTOR_TEXT.test(doctor))return doctor;
+ let name=doctor.split(/CRM/i)[0].replace(/\s+/g,' ').trim().toUpperCase();
+ name=NAME_FIXES[doctorIdentity(name)]||name;
+ let crm=crmNumber(doctor);const fix=CRM_FIXES[doctorIdentity(name)];if(fix&&crm===fix.from)crm=fix.to;
+ return `${name}\nCRM ${crm||MISSING_CRM} - ${affiliation(doctor)}`;
+}
+export const withAffiliation=(doctor,link)=>doctor?`${doctor.split('\n')[0]}\nCRM ${crmNumber(doctor)||MISSING_CRM} - ${link}`:doctor;
+export const doctorLabel=doctor=>{const crm=crmNumber(doctor);return `${String(doctor).split('\n')[0]} · ${crm?'CRM '+crm:'CRM a confirmar'}`;};
+// Troca, em qualquer estrutura JSON, os textos de médico pela forma padronizada.
+export function canonicalizeDeep(value){
+ if(typeof value==='string')return canonicalDoctor(value);
+ if(Array.isArray(value))return value.map(canonicalizeDeep);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,canonicalizeDeep(v)]));
+ return value;
+}
+// Padroniza o que já está salvo na conta (edições, fixos, coberturas, pendências...). Só grava o que mudou.
+export function canonicalizeStorage(storage){
+ let changed=0;const keys=[];for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith('rt-upa:'))keys.push(key);}
+ for(const key of keys){const raw=storage.getItem(key);let value;try{value=JSON.parse(raw);}catch{continue;}const next=JSON.stringify(canonicalizeDeep(value));if(next!==raw&&next!==JSON.stringify(value)){storage.setItem(key,next);changed++;}}
+ return changed;
+}
+// Um item por médico, com o vínculo mais usado por ele como sugestão.
+export function doctorChoices(seed,storage){
+ const counts=new Map(),add=(doctor,weight)=>{if(!doctor||!DOCTOR_TEXT.test(doctor))return;const key=doctorIdentity(doctor);if(!counts.has(key))counts.set(key,new Map());const byText=counts.get(key);byText.set(doctor,(byText.get(doctor)||0)+weight);};
+ for(const doctor of [...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(x=>x.doctor)])add(canonicalDoctor(doctor),0);
+ for(const item of seed.assignments)add(item.doctor,1);
+ for(const pattern of seed.patterns||[])for(const rule of pattern.rules||[])add(rule.doctor,1);
+ const pick=byText=>[...byText].sort((a,b)=>b[1]-a[1]||(crmNumber(a[0])?0:1)-(crmNumber(b[0])?0:1)||AFFILIATIONS.indexOf(affiliation(a[0]))-AFFILIATIONS.indexOf(affiliation(b[0])))[0][0];
+ return [...counts.values()].map(pick).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+// Lista para um seletor: o médico atual aparece com o vínculo que já está no plantão.
+export function doctorOptions(choices,current){
+ if(!current)return choices;const key=doctorIdentity(current);
+ return choices.some(d=>doctorIdentity(d)===key)?choices.map(d=>doctorIdentity(d)===key?current:d):[...choices,current];
 }

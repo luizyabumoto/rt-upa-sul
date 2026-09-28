@@ -1,4 +1,4 @@
-import {parse,doctorIdentity} from './scheduling.js';
+import {parse,doctorIdentity,doctorChoices} from './scheduling.js';
 import {coverageUI} from './coverage-ui.js';
 export function dateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -44,7 +44,7 @@ export function mountOrganizer(storage,seed) {
   nav.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate(b.dataset.view));root.querySelectorAll('[data-new]').forEach(b=>b.onclick=()=>editor(null,b.dataset.new));root.querySelector('#task-filter').onchange=render;root.querySelector('#cancel-editor').onclick=()=>root.querySelector('#editor-panel').hidden=true;
   const taskForm=root.querySelector('#organizer-form'),doctorInput=taskForm.elements.doctor;
   const suggestions=document.createElement('div');suggestions.className='doctor-suggestions';suggestions.setAttribute('aria-label','Sugestões de médicos');doctorInput.after(suggestions);
-  const allDoctors=()=>[...new Set([...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(x=>x.doctor).filter(Boolean)])];
+  const allDoctors=()=>doctorChoices(seed,storage);
   const displayDoctor=d=>d.replaceAll('\n',' · ');
   function suggest(){suggestions.replaceChildren();const query=doctorIdentity(doctorInput.value);if(query.length<2)return;for(const doctor of allDoctors().filter(d=>doctorIdentity(d).includes(query)).slice(0,10)){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=displayDoctor(doctor);b.onclick=()=>{doctorInput.setCustomValidity('');doctorInput.value=displayDoctor(doctor);suggestions.replaceChildren();};suggestions.append(b);}}
   doctorInput.addEventListener('input',()=>{doctorInput.setCustomValidity('');suggest();});
