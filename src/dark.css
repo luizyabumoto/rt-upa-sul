@@ -141,3 +141,4 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 }
 .prod-table tr.destaque td{background:#12303a!important}.prod-table tr.destaque td.strong,.prod-table tr.destaque td.pos{color:#7ee5cf}
 .shift-card>button.secondary{width:100%;margin-top:8px;font-size:12px}
+.account-bar.erro{border-color:#d34c4c;background:#3a1c1c}.account-bar.erro [role=status]{color:#ffb4b4!important;font-weight:700}

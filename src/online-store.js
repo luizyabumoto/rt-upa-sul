@@ -41,9 +41,12 @@ export async function connectStore() {
       const data = await result.json();
       if (!result.ok) throw new Error(data.error || 'Não foi possível salvar.');
       revision = data.revision; dirty = generation !== sentGeneration;
+      banner.classList.remove('erro');
       status.textContent = dirty ? 'Há novas alterações para salvar' : 'Salvo online';
     } catch (error) {
-      status.textContent = error.message + ' Baixar cópia de segurança preserva suas alterações. Se a sessão expirou, entre novamente em outra aba e tente salvar.';
+      // Falha de salvamento não pode passar despercebida: o banner fica vermelho e o aviso, destacado.
+      banner.classList.add('erro');
+      status.textContent = '⚠ NÃO SALVO: ' + error.message + ' Suas alterações ainda estão nesta tela — NÃO atualize a página. Baixe uma cópia de segurança e tente Salvar online.';
     } finally { saving = false; save.disabled = !dirty; logout.disabled = false; reload.disabled = false; if(dirty&&generation!==sentGeneration)autoTimer=setTimeout(()=>save.click(),900); }
   });
   reload.addEventListener('click', () => { if (!dirty || confirm('Há alterações não salvas. Descartá-las e carregar os dados online?')) location.reload(); });
