@@ -43,3 +43,41 @@ button.danger{color:#ffb4b4;border-color:#8a3a3a}button.danger:hover{background:
 .muted,.prod-table .muted{color:#7f95a6}
 .prod-doctor{background:none;border:0;padding:0;color:#c7e5ef;font:inherit;font-weight:700;cursor:pointer;text-align:left}.prod-doctor:hover{color:#5fc9b5;text-decoration:underline}
 .prod-escala-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}.prod-escala-list li{padding:8px 10px;border:1px solid #29384a;border-radius:10px}.prod-escala-list li span{color:#90a7b8}.prod-escala-list li.prod-zero{border-color:#c97a2e}.prod-escala-list li.prod-zero span{color:#ffd9ad}
+/* ===== Escala: reforma visual (cabeçalho da quinzena, cartões de plantão, janela de PDF) ===== */
+.escala-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px;padding:18px 20px;border-radius:16px}
+.escala-toolbar .periodo{display:grid;gap:8px}.escala-toolbar .eyebrow{margin:0;font-size:11px;letter-spacing:.14em;color:#92dfcf}
+.periodo-linha{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}.periodo-linha label{display:grid;gap:5px;font-size:11px;font-weight:700;letter-spacing:.04em;color:#90a7b8;text-transform:uppercase}
+.periodo-linha select,.periodo-linha input{height:42px;font-size:15px;font-weight:650}.periodo-linha #month{min-width:150px}.periodo-linha #year{width:96px}.periodo-linha #half{min-width:190px}
+button.icone{width:42px;height:42px;padding:0;font-size:24px;line-height:1;display:inline-grid;place-items:center}
+.escala-toolbar .acoes{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.escala-toolbar .acoes>button{height:42px}
+.summary{gap:8px;margin:14px 0 4px}.summary span{border-radius:999px;padding:8px 14px;font-size:13px;border:1px solid #29435a}
+.daily-schedule{margin:22px 0 28px}.daily-schedule .section-heading{align-items:flex-end;gap:16px;flex-wrap:wrap}
+#schedule-weekday{font-size:12px;letter-spacing:.06em;color:#92dfcf}
+.schedule-tabs{align-items:center;gap:8px;margin:18px 0 10px}.schedule-tabs [data-group]{border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700}
+.schedule-tabs [data-group].active{background:#51cab2;color:#082b27;border-color:#51cab2}#toggle-grid{margin-left:auto}.schedule-tabs #toggle-grid,.schedule-tabs #copy-week,.schedule-tabs #cinderela-excel{font-size:13px;border-radius:10px}
+#schedule-origin{margin:4px 2px 14px;color:#90a7b8}
+.day-cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.shift-card{display:flex;flex-direction:column;gap:6px;padding:16px 16px 14px;border-radius:14px;box-shadow:0 4px 18px #0003}
+.shift-card h3{margin:0;font-size:13px;letter-spacing:.03em;text-transform:uppercase;color:#b5cadf}.shift-card .shift-hours{margin:0 0 6px;font-size:12px}
+.shift-card .doctor-name{min-height:0;margin:2px 0 0;font-size:17px;line-height:1.35;font-weight:750}.doctor-crm{color:#8aa0b3;font-size:12px}
+.shift-card .affiliation{align-self:flex-start;margin:4px 0 2px}
+.shift-edit{margin-top:auto;padding-top:10px;border-top:1px solid #243548}.shift-edit>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:#7bdac9;padding:6px 2px;user-select:none}
+.shift-edit>summary::-webkit-details-marker{display:none}.shift-edit>summary::after{content:'▾';font-size:12px;transition:transform .15s}.shift-edit[open]>summary::after{transform:rotate(180deg)}
+.shift-edit[open]{display:grid;gap:10px}.shift-edit label{margin-top:0;display:grid;gap:6px;font-size:12px;color:#90a7b8}.shift-edit .doctor-picker{margin:0}.shift-edit>button{width:100%;font-size:12px}
+.shift-card.needs-doctor{background:#1f1a16}.shift-card.needs-doctor .shift-edit>summary{color:#ffb56a}
+.clinico-add{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:12px 16px;background:#12303a;border-color:#2f6a73}
+.clinico-add h3{margin:0;font-size:14px;color:#e3ebf5;text-transform:none;letter-spacing:0}.clinico-add .notice{margin:0;color:#9fd8cc}.clinico-add label{margin:0;display:flex;align-items:center;gap:10px;font-size:13px;color:#c7e5ef}.clinico-add .doctor-picker{margin:0;min-width:240px}.clinico-add select{min-width:260px}
+details.settings{padding:0;border-radius:14px}details.settings>summary{padding:16px 20px;cursor:pointer;font-weight:700}details.settings[open]>summary{border-bottom:1px solid #29384a}details.settings .forms,details.settings #settings-list{padding:16px 20px}
+.visitors{border-radius:14px}.visitors h2{font-size:16px}
+.pdf-dialog{width:min(96vw,760px);max-height:92vh;overflow:auto;border:1px solid #3e576c;background:#142130;color:#e9f1f8;border-radius:18px;padding:22px}.pdf-dialog::backdrop{background:#050a12cc}
+.pdf-dialog #pdf-panel .card{background:transparent;border:0;box-shadow:none;padding:0}.pdf-dialog .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.pdf-dialog label{display:grid;gap:6px}.pdf-dialog>.actions{display:flex;justify-content:flex-end;margin-top:8px}
+@media(max-width:700px){
+ .escala-toolbar{padding:14px;gap:12px}.escala-toolbar .periodo,.escala-toolbar .acoes{width:100%}
+ .periodo-linha{display:grid;grid-template-columns:42px 1fr 1fr 42px;gap:8px}.periodo-linha #prev-half{grid-column:1;grid-row:1/3;align-self:stretch;height:auto}.periodo-linha #next-half{grid-column:4;grid-row:1/3;align-self:stretch;height:auto}
+ .periodo-linha label{min-width:0}.periodo-linha #month,.periodo-linha #year,.periodo-linha #half{min-width:0;width:100%}.periodo-linha label:has(#half){grid-column:2/4}
+ .escala-toolbar .acoes>button,.escala-toolbar .acoes .backup-menu{flex:1 1 140px}.escala-toolbar .acoes .backup-menu>summary{text-align:center}
+ .schedule-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.schedule-tabs button{flex:0 0 auto}#toggle-grid{margin-left:0}
+ .escala-toolbar .acoes>button{height:auto;min-height:42px;line-height:1.2}
+ .daily-schedule .section-heading{flex-direction:column;align-items:stretch;text-align:left}.daily-schedule .section-heading .actions{justify-content:flex-start}
+ .day-cards{grid-template-columns:1fr;gap:10px}.shift-card{padding:14px}.clinico-add label,.clinico-add .doctor-picker,.clinico-add select{width:100%;min-width:0}.clinico-add label{display:grid}
+}

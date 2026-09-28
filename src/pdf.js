@@ -4,7 +4,11 @@ export function mountPdf(storage){
  const form=root.querySelector('form');let lastUrl;const links=root.querySelector('#pdf-links');
  const months=document.querySelector('#month');for(const option of months.options)form.elements.month.add(new Option(option.text,option.value));
  function period(){for(const k of ['year','month','half'])form.elements[k].value=document.querySelector('#'+k).value;}
- document.querySelector('[data-view="pdf"]').addEventListener('click',period);period();
+ // Imprimir / PDF fica dentro da aba Escala: a janela abre já com a quinzena que está na tela.
+ const dialog=document.querySelector('#pdf-dialog');
+ document.querySelector('#open-pdf').addEventListener('click',()=>{period();dialog.showModal();});
+ document.querySelector('#close-pdf').addEventListener('click',()=>dialog.close());
+ period();
  form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('button'),status=root.querySelector('#pdf-status');button.disabled=true;status.textContent='Preparando PDF…';try{
   const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key);}
   const payload={items};for(const k of ['year','month','half'])payload[k]=Number(form.elements[k].value);for(const k of ['kind','layout'])payload[k]=form.elements[k].value;
