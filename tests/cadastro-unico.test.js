@@ -12,9 +12,11 @@ test('padroniza espaços, vínculo e as correções confirmadas de nome e CRM', 
  assert.equal(canonicalDoctor('GUSTAVO LUIZ SILA CAMPOS\nCRM 11745 - SMS'), 'GUSTAVO LUIZ SILVA CAMPOS\nCRM 11745 - SMS');
  assert.equal(canonicalDoctor('BLAYRA BORGES\nCRM 13940 -EXTRA  SMS'), 'BLAYRA BORGES BARBOSA\nCRM 13940 - EXTRA SMS');
  assert.equal(canonicalDoctor('INGRID TAVARES DE PAULA TELES\nCRM 17422 - COAPH'), 'INGRID TAVARES DE PAULA TELES\nCRM 17422 - COAPH');
- assert.equal(canonicalDoctor('JOSÉ PEDRO MARCHRY VACARI\nCRM 17422 - COAPH'), 'JOSÉ PEDRO MARCHRY VACARI\nCRM A CONFIRMAR - COAPH');
- // Quando o CRM certo do José Pedro for cadastrado, ele é mantido.
- assert.equal(canonicalDoctor('JOSÉ PEDRO MARCHRY VACARI\nCRM 12345 - COAPH'), 'JOSÉ PEDRO MARCHRY VACARI\nCRM 12345 - COAPH');
+ // José Pedro: nome corrigido (MACHRY) e CRM 17877, vindo do CRM repetido ou do "A CONFIRMAR" já salvo.
+ assert.equal(canonicalDoctor('JOSÉ PEDRO MARCHRY VACARI\nCRM 17422 - COAPH'), 'JOSÉ PEDRO MACHRY VACARI\nCRM 17877 - COAPH');
+ assert.equal(canonicalDoctor('JOSÉ PEDRO MARCHRY VACARI\nCRM A CONFIRMAR - COAPH'), 'JOSÉ PEDRO MACHRY VACARI\nCRM 17877 - COAPH');
+ assert.equal(canonicalDoctor('JOSÉ PEDRO MACHRY VACARI\nCRM 17877 - EXTRA SMS'), 'JOSÉ PEDRO MACHRY VACARI\nCRM 17877 - EXTRA SMS');
+ assert.equal(canonicalDoctor('FULANO DE TAL\nCRM A CONFIRMAR - SMS'), 'FULANO DE TAL\nCRM A CONFIRMAR - SMS');
  assert.equal(canonicalDoctor(''), '');
  assert.equal(canonicalDoctor('Cobertura combinada por telefone'), 'Cobertura combinada por telefone');
 });

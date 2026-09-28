@@ -127,16 +127,16 @@ export function periodReview(seed,storage,dates){
 // gravado (a planilha oficial depende dele), mas nome, CRM e vínculo são padronizados e o
 // mesmo médico aparece uma vez só nas listas; o vínculo é escolhido em cada plantão.
 export const AFFILIATIONS=['SMS','COAPH','EXTRA SMS'];
-const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges:'BLAYRA BORGES BARBOSA'};
-// CRM 17422 é da Ingrid; o do José Pedro estava repetido e ainda precisa ser informado.
-const CRM_FIXES={josepedromarchryvacari:{from:'17422',to:''}};
+const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges:'BLAYRA BORGES BARBOSA',josepedromarchryvacari:'JOSÉ PEDRO MACHRY VACARI'};
+// CRM 17422 é da Ingrid; o do José Pedro vinha repetido (ou "A CONFIRMAR") e é 17877.
+const CRM_FIXES={josepedromachryvacari:{from:['17422',''],to:'17877'}};
 export const MISSING_CRM='A CONFIRMAR';
 const DOCTOR_TEXT=/^[^\n]+\nCRM\s*(\d+|A CONFIRMAR)?\s*-?\s*(EXTRA\s*SMS|COAPH|SMS)?\s*$/i;
 export function canonicalDoctor(doctor){
  if(typeof doctor!=='string'||!DOCTOR_TEXT.test(doctor))return doctor;
  let name=doctor.split(/CRM/i)[0].replace(/\s+/g,' ').trim().toUpperCase();
  name=NAME_FIXES[doctorIdentity(name)]||name;
- let crm=crmNumber(doctor);const fix=CRM_FIXES[doctorIdentity(name)];if(fix&&crm===fix.from)crm=fix.to;
+ let crm=crmNumber(doctor);const fix=CRM_FIXES[doctorIdentity(name)];if(fix&&fix.from.includes(crm))crm=fix.to;
  return `${name}\nCRM ${crm||MISSING_CRM} - ${affiliation(doctor)}`;
 }
 export const withAffiliation=(doctor,link)=>doctor?`${doctor.split('\n')[0]}\nCRM ${crmNumber(doctor)||MISSING_CRM} - ${link}`:doctor;
