@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
@@ -67,7 +67,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -128,6 +128,18 @@ def validate_items(items):
                             raise ApiError(400, 'Data inválida.')
                 if item.get('type') == 'Férias' and item['kind'] == 'task' and (not item['doctor'].strip() or not item['date'] or not item.get('endDate') or item['endDate'] < item['date']):
                     raise ApiError(400, 'Confira médico e período das férias.')
+        elif name == 'trocas':
+            # Trocas detectadas pela produção (aplicadas automaticamente ou desfeitas): histórico para o alerta do Painel.
+            if not isinstance(parsed, list) or len(parsed) > 2000:
+                raise ApiError(400, 'Histórico de trocas inválido.')
+            campos = {'id', 'data', 'turno', 'slot', 'saiu', 'entrou', 'consultas', 'status', 'criadoEm'}
+            for item in parsed:
+                if not isinstance(item, dict) or set(item) != campos or item['status'] not in ('aplicada', 'mantida', 'desfeita') or item['turno'] not in ('D', 'N'):
+                    raise ApiError(400, 'Troca inválida.')
+                if type(item['slot']) is not int or not 0 <= item['slot'] <= 13 or type(item['consultas']) is not int or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(item['data'])):
+                    raise ApiError(400, 'Troca inválida.')
+                if any(not isinstance(item[k], str) or len(item[k]) > 500 for k in ('id', 'saiu', 'entrou', 'criadoEm')):
+                    raise ApiError(400, 'Troca inválida.')
         elif name == 'roster':
             if not isinstance(parsed,list) or len(parsed)>2000:
                 raise ApiError(400,'Lista de dias fixos inválida.')

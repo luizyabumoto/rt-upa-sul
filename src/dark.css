@@ -113,3 +113,8 @@ header small{margin-left:46px;margin-top:2px;letter-spacing:.02em}
 .chart-table{margin-top:6px}.chart-table>summary{cursor:pointer;font-size:12px;color:#7bdac9}.chart-table table{margin-top:6px;font-size:12px}
 .demand-charts>.prod-section{margin:0}
 @media(max-width:700px){.demand-charts{grid-template-columns:1fr}.section-heading h2{font-size:20px}header h1{font-size:19px}.workspace-nav{margin-left:-4px;margin-right:-4px}}
+/* Trocas detectadas pela produção (Painel) e marca no cartão da Escala */
+.trocas-alerta{margin:0 0 20px;padding:16px 18px;border:1px solid #c97a2e;border-radius:14px;background:#231b12}
+.trocas-alerta h3{margin:0 0 10px;font-size:15px;color:#ffd9ad}.trocas-alerta .troca{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #3a2c1c}
+.trocas-alerta p{margin:0;line-height:1.5;color:#f1e3d0}.trocas-alerta .troca.suspeita{display:block;color:#e8d4bb}.trocas-alerta .actions{display:flex;gap:8px}
+.troca-badge{margin:4px 0 0;padding:6px 10px;border-radius:8px;background:#2a2212;color:#ffd9ad;font-size:12px;font-weight:700}

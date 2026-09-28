@@ -10,6 +10,7 @@ import {mountOrganizer} from './organizer.js';
 import {mountFlow} from './flow.js';
 import {mountProduction} from './production.js';
 import {mountDemand} from './demand.js';
+import {mountTrocas} from './trocas.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -90,6 +91,7 @@ mountOrganizer(storage,seed);
 // Módulo independente: uma falha no Fluxo de pacientes nunca pode impedir a escala de abrir.
 try{mountFlow();mountDemand();}catch(error){console.error('Fluxo de pacientes',error);}
 try{mountProduction(storage,seed);}catch(error){console.error('Produção médica',error);}
+try{mountTrocas(storage,seed);}catch(error){console.error('Trocas detectadas',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

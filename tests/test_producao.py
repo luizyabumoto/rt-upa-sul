@@ -173,3 +173,13 @@ class DemandaTests(unittest.TestCase):
         with patch('online.remote', side_effect=provider):
             self.assertEqual(request('/api/demanda?inicio=2026-09-01T07:00')['status'], 401)
             self.assertEqual(request('/src/demand.js')['status'], 401)
+
+
+class HistoricoTrocasTests(unittest.TestCase):
+    def test_servidor_aceita_historico_valido_e_recusa_invalido(self):
+        item = {'id': '2026-10-01D|4|ANA|BIA', 'data': '2026-10-01', 'turno': 'D', 'slot': 4, 'saiu': 'ANA\nCRM 1 - SMS',
+                'entrou': 'BIA\nCRM 2 - SMS', 'consultas': 16, 'status': 'aplicada', 'criadoEm': '2026-10-01T15:00:00.000Z'}
+        self.assertIn('trocas', online.validate_items({'rt-upa:trocas': json.dumps([item])}))
+        for ruim in ({**item, 'status': 'qualquer'}, {**item, 'slot': 20}, {**item, 'extra': 1}, {**item, 'data': 'ontem'}):
+            with self.assertRaises(online.ApiError):
+                online.validate_items({'rt-upa:trocas': json.dumps([ruim])})
