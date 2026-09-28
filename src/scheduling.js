@@ -14,12 +14,46 @@ export const vacationMessage=item=>`Em férias de ${item.date.split('-').reverse
 export const affiliation=doctor=>/EXTRA/i.test(doctor)?'EXTRA SMS':/COAPH/i.test(doctor)?'COAPH':doctor?'SMS':'';
 export const affiliationClass=doctor=>affiliation(doctor)==='COAPH'?'link-coaph':affiliation(doctor)==='EXTRA SMS'?'link-extra':'link-sms';
 export function patternFor(seed,date){return (seed.patterns||[]).filter(x=>x.start<=date&&(!x.end||date<=x.end)).sort((a,b)=>b.start.localeCompare(a.start))[0];}
-export function recurringRule(seed,storage,date,weekday,slot){
+
+// Diurno/noturno · Clínico 1-4: quatro postos fisicamente iguais. Um médico pode
+// ser cadastrado como "Clínico (qualquer)" em vez de preso a um número — ver
+// genericClinicoDoctors. Eles só preenchem posições que sobrarem vagas; nunca
+// substituem um médico já fixo/importado num número específico.
+export const CLINICO_TURNS={dia:[0,1,2,3],noite:[7,8,9,10]};
+const clinicoTurnForSlot=slot=>Object.keys(CLINICO_TURNS).find(turn=>CLINICO_TURNS[turn].includes(slot))||null;
+export function genericClinicoDoctors(storage,date,weekday,turn){
+ const rows=parse(storage,'clinicoRoster',[]).filter(x=>x.weekday===weekday&&x.turn===turn&&x.start<=date).sort((a,b)=>a.start.localeCompare(b.start)||a.id.localeCompare(b.id));
+ const latest=new Map();for(const row of rows)latest.set(doctorIdentity(row.doctor),row);
+ return [...latest.values()].filter(row=>row.active).map(row=>row.doctor).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+function pinnedRule(seed,storage,date,weekday,slot){
  const overrides=parse(storage,'roster',[]).filter(x=>x.start<=date&&x.weekday===weekday&&x.slot===slot).sort((a,b)=>b.start.localeCompare(a.start)||b.id.localeCompare(a.id));
  if(overrides.length)return {...overrides[0],status:'custom'};
  const legacy=parse(storage,'fixed',[]).find(x=>Number(x.weekday)===weekday&&Number(x.slot)===slot);if(legacy)return {...legacy,status:'custom'};
  if(slot>=14)return {...(seed.cinderelas||[]).find(x=>x.weekday===weekday&&x.slot===slot),status:'regular'};
  return patternFor(seed,date)?.rules.find(x=>x.weekday===weekday&&x.slot===slot);
+}
+// Igual a pinnedRule, mas também considera a escala exata importada (seed.assignments)
+// quando não há padrão/roster cobrindo a data — é o que "reserva" um slot pra fins de
+// preenchimento genérico, mesmo quando o único registro daquele dia é o histórico importado.
+function nonGenericResolution(seed,storage,date,weekday,slot){
+ const rule=pinnedRule(seed,storage,date,weekday,slot);
+ if(rule?.status==='custom'||slot>=14)return rule;
+ const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);
+ if(exact)return {doctor:exact.doctor,status:'regular'};
+ return rule;
+}
+export function recurringRule(seed,storage,date,weekday,slot){
+ const turn=clinicoTurnForSlot(slot);
+ if(!turn)return pinnedRule(seed,storage,date,weekday,slot);
+ const group=CLINICO_TURNS[turn];
+ const pinned=new Map(group.map(s=>[s,nonGenericResolution(seed,storage,date,weekday,s)]));
+ const taken=new Set([...pinned.values()].filter(r=>r?.doctor).map(r=>doctorIdentity(r.doctor)));
+ const pool=genericClinicoDoctors(storage,date,weekday,turn).filter(doctor=>!taken.has(doctorIdentity(doctor)));
+ const emptySlots=group.filter(s=>!pinned.get(s)?.doctor);
+ const index=emptySlots.indexOf(slot);
+ if(index!==-1&&index<pool.length)return {doctor:pool[index],status:'custom',generic:true};
+ return pinned.get(slot);
 }
 export function plannedDoctor(seed,storage,date,slot){
  const weekday=new Date(date+'T12:00:00').getDay(),rule=recurringRule(seed,storage,date,weekday,slot);
