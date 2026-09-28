@@ -63,6 +63,14 @@ export function plannedDoctor(seed,storage,date,slot){
  return rule?.doctor||'';
 }
 export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;return Object.hasOwn(edits,key)?edits[key]:plannedDoctor(seed,storage,date,slot);}
+// Inclusão avulsa num turno de clínicos: o médico entra na primeira posição (1 a 4) sem médico
+// e sem cobertura confirmada. O número só importa para a planilha oficial; quem usa não escolhe.
+export function clinicoOccupancy(seed,storage,date,turn){
+ const coverages=parse(storage,'coverages',[]).filter(x=>x.confirmed&&x.date===date);
+ const doctors=[],free=[];
+ for(const slot of CLINICO_TURNS[turn]){const doctor=baseDoctor(seed,storage,date,slot);if(doctor)doctors.push(doctor);else if(!coverages.some(x=>x.slot===slot))free.push(slot);}
+ return {doctors,free,total:CLINICO_TURNS[turn].length};
+}
 export function segments(seed,storage,date,slot){const [start,end]=bounds(slot),base=baseDoctor(seed,storage,date,slot);const covers=parse(storage,'coverages',[]).filter(x=>x.confirmed&&x.date===date&&x.slot===slot).sort((a,b)=>a.start-b.start);const result=[];let cursor=start;for(const c of covers){if(c.start>cursor)result.push({start:cursor,end:c.start,doctor:base});result.push({...c,coverage:true});cursor=c.end;}if(cursor<end)result.push({start:cursor,end,doctor:base});return result;}
 export function validateCoverage(item,existing){const [start,end]=bounds(item.slot);if(!Number.isInteger(item.slot)||item.slot<0||item.slot>15||!item.date||!item.doctor||!Number.isInteger(item.start)||!Number.isInteger(item.end)||item.start<start||item.end>end||item.start>=item.end)throw new Error('Confira data, posto, médico e intervalo da cobertura.');if(existing.some(x=>x.confirmed&&x.id!==item.id&&x.date===item.date&&x.slot===item.slot&&x.start<item.end&&item.start<x.end))throw new Error('Já existe uma cobertura confirmada nesse intervalo. Desfaça a anterior para substituí-la.');}
 
