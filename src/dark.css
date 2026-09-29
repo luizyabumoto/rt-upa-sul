@@ -149,3 +149,7 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 .flow-maior-alerta{color:#ff9daa!important;font-weight:700}
 .flow-estourou-nota{margin:4px 0 0;color:#ffb4b4;font-size:12px;font-weight:700}
 .versoes-lista{display:grid;gap:8px;margin:8px 0;max-height:52vh;overflow:auto}.versao{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid #29384a;border-radius:10px}.versao span{font-size:13px}
+.resumo-dia{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 20px}
+.resumo-tile{display:grid;gap:4px;padding:16px 18px;background:#12303a;border:1px solid #2f6a73;border-radius:14px;text-align:left;color:#e3ebf5;font:inherit;cursor:default}
+button.resumo-tile{cursor:pointer}button.resumo-tile:hover{border-color:#5fc9b5}
+.resumo-label{font-size:11px;font-weight:800;letter-spacing:.08em;color:#92dfcf}.resumo-valor{font-size:30px;line-height:1.1;letter-spacing:-.5px}.resumo-tile small{color:#9fd8cc}
