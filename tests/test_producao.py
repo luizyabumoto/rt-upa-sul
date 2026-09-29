@@ -234,3 +234,10 @@ class AtrasosTests(unittest.TestCase):
         self.assertEqual((r['ANA']['atrasoMedio'], r['ANA']['piorAtraso'], r['ANA']['maiorIntervalo']), (30, 30, 120))
         self.assertEqual(r['BIA']['atrasoMedio'], 5)
         self.assertEqual(list(x['medico'] for x in resumir_atrasos(linhas)), ['ANA', 'BIA'])   # ordenado por atraso
+
+    def test_atraso_acima_de_2h_e_ignorado(self):
+        from gestor_saude import resumir_atrasos, CUIABA
+        from datetime import datetime
+        at = lambda medico, iso: (medico, datetime.fromisoformat(iso).replace(tzinfo=CUIABA), 'URGENTE')
+        linhas = {'adulto': [at('CINDER', '2026-10-06T10:00'), at('CINDER', '2026-10-06T11:00')]}
+        self.assertEqual(resumir_atrasos(linhas), [])

@@ -139,6 +139,9 @@ def resumir_atrasos(linhas):
         momentos.sort()
         inicio = datetime.fromisoformat(f'{data}T{"07" if turno == "D" else "19"}:00').replace(tzinfo=CUIABA)
         atraso = max(0, (momentos[0] - inicio).total_seconds() / 60)
+        # Acima de 2 h quase sempre é Cinderela/extra/entrada em horário diferente, não atraso real: ignora esse plantão.
+        if atraso > 120:
+            continue
         maior_intervalo = max((((b - a).total_seconds() / 60) for a, b in zip(momentos, momentos[1:])), default=0)
         m = por_medico[medico]
         m['plantoes'] += 1

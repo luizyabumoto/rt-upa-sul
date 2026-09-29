@@ -136,7 +136,7 @@ export function mountDemand(storage, seed) {
  if (!flow) return;
  const secao = el('section', 'demand');
  secao.innerHTML = '<div class="section-heading"><div><p class="eyebrow">ANÁLISE DE DEMANDA · CONSULTAS MÉDICAS</p><h2>Quando a unidade mais atende</h2></div><div class="actions"><span class="demand-status" role="status" aria-live="polite"></span></div></div>' +
-  '<div class="prod-controls"><label>Período<select class="demand-period"></select></label><label class="demand-free" hidden>Início<input type="date" class="demand-start"></label><label class="demand-free" hidden>Fim<input type="date" class="demand-end"></label><label>Turno<select class="demand-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–18h)</option><option value="N">Só noturno (19h–06h)</option></select></label></div>' +
+  '<div class="prod-controls"><label>Período<select class="demand-period"></select></label><label class="demand-free" hidden>Início<input type="date" class="demand-start"></label><label class="demand-free" hidden>Fim<input type="date" class="demand-end"></label><label>Turno<select class="demand-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–18h)</option><option value="N">Só noturno (19h–06h)</option></select></label><label class="demand-comparar-label"><input type="checkbox" class="demand-comparar"> Comparar com período anterior</label></div>' +
   '<div class="flow-kpis demand-kpis"></div><div class="demand-charts"></div>' +
   '<p class="notice">Consultas nos Consultórios Adulto e Pediátrico pelo horário do atendimento (retornos não entram). Médias por dia da semana e por hora consideram todos os dias do período, inclusive os com zero. Meses já encerrados ficam guardados neste navegador.</p>';
  flow.append(secao);
@@ -154,12 +154,13 @@ export function mountDemand(storage, seed) {
   return a && b ? {inicio: `${a}T00:00`, fim: `${b}T23:59`} : null;
  }
 
- function render(a, inicio, fimTexto, horas = {}) {
+ const variar = (atual, ant) => { if (ant === null || ant === undefined || !ant) return ''; const p = Math.round((atual - ant) / ant * 100); return ` · ${p > 0 ? '▲ +' : p < 0 ? '▼ ' : ''}${p}% vs anterior`; };
+ function render(a, inicio, fimTexto, horas = {}, comparacao = null) {
   const kpi = (rotulo, valor, detalhe) => { const b = el('div', 'flow-kpi'); b.append(el('span', 'flow-kpi-label', rotulo), el('strong', 'flow-kpi-value', valor), el('small', '', detalhe)); return b; };
   const semanaTop = a.semana.reduce((x, y) => (y.media > x.media ? y : x)), horaTop = a.hora.reduce((x, y) => (y.media > x.media ? y : x));
   $('.demand-kpis').replaceChildren(
-   kpi('CONSULTAS NO PERÍODO', numero(a.total), `${dataBR(inicio)} a ${fimTexto}`),
-   kpi('MÉDIA POR DIA', numero(a.mediaDia, 1), `${a.dias.length} dias`),
+   kpi('CONSULTAS NO PERÍODO', numero(a.total), `${dataBR(inicio)} a ${fimTexto}${comparacao ? variar(a.total, comparacao.total) : ''}`),
+   kpi('MÉDIA POR DIA', numero(a.mediaDia, 1), `${a.dias.length} dias${comparacao ? variar(a.mediaDia, comparacao.mediaDia) : ''}`),
    kpi('DIA RECORDE', numero(a.recorde.total), `${dataBR(a.recorde.data)} · ${DIAS_SEMANA[new Date(a.recorde.data + 'T12:00:00Z').getUTCDay()].toLowerCase()}`),
    kpi('DIA DA SEMANA MAIS CHEIO', semanaTop.nome, `média de ${numero(semanaTop.media, 1)} consultas`),
    kpi('HORÁRIO DE PICO', `${String(horaTop.hora).padStart(2, '0')}h`, `média de ${numero(horaTop.media, 1)} consultas nessa hora`));
@@ -185,14 +186,13 @@ export function mountDemand(storage, seed) {
   $('.demand-charts').replaceChildren(...graficos, top);
  }
 
- async function carregar() {
-  const periodo = escolha();
-  if (!periodo) { $('.demand-status').textContent = 'Escolha início e fim.'; return; }
-  const meu = ++pedido, lista = janelas(periodo.inicio, periodo.fim), horas = {};
+ // Lê as horas de um intervalo, janela a janela, aproveitando o cache local dos meses encerrados.
+ async function lerHoras(ini, fimTexto, meu, rotulo) {
+  const lista = janelas(ini, fimTexto), horas = {};
   let falhas = 0;
   for (let i = 0; i < lista.length; i++) {
-   if (meu !== pedido) return;
-   $('.demand-status').textContent = `Lendo o Gestor Saúde… ${i + 1} de ${lista.length}`;
+   if (meu !== pedido) return null;
+   $('.demand-status').textContent = `Lendo o Gestor Saúde… ${rotulo}${i + 1} de ${lista.length}`;
    const janela = lista[i];
    let parte = janela.fim !== 'agora' ? guardado(janela) : null;
    if (!parte) {
@@ -206,10 +206,29 @@ export function mountDemand(storage, seed) {
    }
    Object.assign(horas, parte);
   }
+  return {horas, falhas};
+ }
+
+ async function carregar() {
+  const periodo = escolha();
+  if (!periodo) { $('.demand-status').textContent = 'Escolha início e fim.'; return; }
+  const meu = ++pedido;
+  const principal = await lerHoras(periodo.inicio, periodo.fim, meu, '');
+  if (!principal) return;
+  const fimReal = periodo.fim === 'agora' ? texto(cuiaba(new Date())) : periodo.fim;
+  let anterior = null;
+  if ($('.demand-comparar').checked) {
+   // Período anterior de mesma duração, terminando no início do período atual.
+   const dur = new Date(fimReal + ':00Z') - new Date(periodo.inicio + ':00Z');
+   const iniAnt = texto(new Date(new Date(periodo.inicio + ':00Z') - dur));
+   const bloco = await lerHoras(iniAnt, periodo.inicio, meu, 'comparação · ');
+   if (!bloco) return;
+   anterior = {horas: bloco.horas, inicio: iniAnt, fim: periodo.inicio};
+  }
   if (meu !== pedido) return;
-  ultimo = {horas, inicio: periodo.inicio, fimReal: periodo.fim === 'agora' ? texto(cuiaba(new Date())) : periodo.fim, rotuloFim: periodo.fim === 'agora' ? 'hoje' : dataBR(periodo.fim)};
+  ultimo = {horas: principal.horas, inicio: periodo.inicio, fimReal, rotuloFim: periodo.fim === 'agora' ? 'hoje' : dataBR(periodo.fim), anterior};
   desenhar();
-  $('.demand-status').textContent = falhas ? `Atenção: ${falhas} de ${lista.length} partes do período não puderam ser lidas agora.` : `Atualizado às ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}`;
+  $('.demand-status').textContent = principal.falhas ? `Atenção: ${principal.falhas} parte(s) do período não puderam ser lidas agora.` : `Atualizado às ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}`;
  }
 
  // Filtra as horas por turno (diurno 07h–18h · noturno 19h–06h) e redesenha, sem reler o Gestor Saúde.
@@ -218,13 +237,19 @@ export function mountDemand(storage, seed) {
   if (!ultimo) return;
   const t = turnoDemanda;
   const dentro = h => t === 'D' ? (h >= 7 && h <= 18) : t === 'N' ? (h >= 19 || h <= 6) : true;
-  const horas = t ? Object.fromEntries(Object.entries(ultimo.horas).filter(([k]) => dentro(Number(k.slice(11, 13))))) : ultimo.horas;
-  render(analisar(horas, ultimo.inicio, ultimo.fimReal), ultimo.inicio, ultimo.rotuloFim, horas);
+  const soTurno = obj => t ? Object.fromEntries(Object.entries(obj).filter(([k]) => dentro(Number(k.slice(11, 13))))) : obj;
+  const horas = soTurno(ultimo.horas);
+  let comparacao = null;
+  if (ultimo.anterior) {
+   const a = analisar(soTurno(ultimo.anterior.horas), ultimo.anterior.inicio, ultimo.anterior.fim);
+   comparacao = {total: a.total, mediaDia: a.mediaDia, rotulo: `${dataBR(ultimo.anterior.inicio)} a ${dataBR(ultimo.anterior.fim)}`};
+  }
+  render(analisar(horas, ultimo.inicio, ultimo.fimReal), ultimo.inicio, ultimo.rotuloFim, horas, comparacao);
  }
 
  $('.demand-period').onchange = () => { secao.querySelectorAll('.demand-free').forEach(l => { l.hidden = $('.demand-period').value !== 'livre'; }); if ($('.demand-period').value !== 'livre') carregar(); };
  $('.demand-start').onchange = $('.demand-end').onchange = carregar;
- secao.addEventListener('change', e => { if (e.target.classList.contains('demand-turno')) { turnoDemanda = e.target.value; desenhar(); } });
+ secao.addEventListener('change', e => { if (e.target.classList.contains('demand-turno')) { turnoDemanda = e.target.value; desenhar(); } if (e.target.classList.contains('demand-comparar')) carregar(); });
  // Carrega na primeira vez que a aba Fluxo de pacientes é aberta.
  document.querySelector('[data-view="flow"]')?.addEventListener('click', () => { if (!carregado) { carregado = true; carregar(); } });
 }

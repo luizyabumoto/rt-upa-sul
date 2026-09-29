@@ -210,7 +210,7 @@ export function mountProduction(storage, seed) {
  const panel = document.querySelector('#production-panel');
  if (!panel) return;
  panel.innerHTML = '<div class="section-heading"><div><p class="eyebrow">GESTOR SAÚDE · PRODUÇÃO ANALÍTICO</p><h2>Produção médica</h2></div><div class="actions"><span class="prod-updated" role="status" aria-live="polite"></span><button type="button" class="secondary prod-refresh">Atualizar</button><button type="button" class="secondary prod-print">Relatório do mês (PDF)</button></div></div>' +
-  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Turno<select class="prod-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–19h)</option><option value="N">Só noturno (19h–07h)</option></select></label><label>Ranking<select class="prod-group"></select></label><label>Comparar com<select class="prod-compare"><option value="">Sem comparação</option><option value="anterior">Período anterior</option><option value="ano">Mesmo período do ano passado</option></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
+  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Turno<select class="prod-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–19h)</option><option value="N">Só noturno (19h–07h)</option></select></label><label>Buscar médico<input type="search" class="prod-busca" placeholder="Nome do médico"></label><label>Ranking<select class="prod-group"></select></label><label>Comparar com<select class="prod-compare"><option value="">Sem comparação</option><option value="anterior">Período anterior</option><option value="ano">Mesmo período do ano passado</option></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
   '<p class="flow-alert prod-alert" role="alert" hidden></p><div class="flow-kpis prod-kpis"></div><div class="prod-escala"></div><div class="prod-tables"></div>' +
   '<p class="notice">Consultas nos Consultórios Adulto (Médico Clínico) e Pediátrico (Médico Pediatra), pelo horário do atendimento. Plantões de 12 h: diurno 07h–19h e noturno 19h–07h. Retornos baixados aparecem à parte e não entram no total nem no ranking. Clique no nome do médico para ver os plantões dele na escala.</p>';
  const $ = s => panel.querySelector(s);
@@ -218,8 +218,11 @@ export function mountProduction(storage, seed) {
  for (const [v, t] of AGRUPAR) $('.prod-group').add(new Option(t, v));
  let dados = null, lista = [], carregando = false, pedido = 0, comparado = null;
  // Filtro de turno (diurno/noturno) aplicado a todas as tabelas; é filtro local, não recarrega o Gestor Saúde.
- let turnoAtual = '';
+ let turnoAtual = '', buscaAtual = '';
  const filtra = rs => turnoAtual ? (rs || []).filter(r => r.turno === turnoAtual) : (rs || []);
+ // Busca de médico: casa por nome sem acento; vazio mostra todos.
+ const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+ const casaMedico = m => !buscaAtual || semAcento(m.medico).includes(buscaAtual);
 
  function escolha() {
   const chave = $('.prod-period').value;
@@ -290,7 +293,7 @@ export function mountProduction(storage, seed) {
  function tabelaPerfilHora() {
   const um = n => Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
   const hh = h => `${String(h).padStart(2, '0')}h`;
-  const lista = (dados.perfilMedicos || []).filter(m => m.total);
+  const lista = (dados.perfilMedicos || []).filter(m => m.total).filter(casaMedico);
   const box = el('section', 'prod-section');
   box.append(el('h3', '', 'Ritmo por hora dos médicos'), el('p', 'chart-sub', 'Pacientes por hora de cada médico no período, com o horário em que mais e menos produz.' + (turnoAtual ? ' (Considera o período inteiro; o filtro de turno não se aplica a esta tabela.)' : '')));
   if (!lista.length) { box.append(el('p', 'notice', 'Sem consultas no período.')); return box; }
@@ -314,7 +317,7 @@ export function mountProduction(storage, seed) {
  // Minutos em formato humano (0, 18 min, 1h12).
  const minutos = m => m < 1 ? 'na hora' : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
  function tabelaAtrasos() {
-  const lista = dados.perfilMedicos ? (dados.atrasos || []) : [];
+  const lista = (dados.perfilMedicos ? (dados.atrasos || []) : []).filter(casaMedico);
   const box = el('section', 'prod-section');
   box.append(el('h3', '', 'Início do atendimento e intervalos'), el('p', 'chart-sub', 'Tempo entre o início do plantão (07h diurno · 19h noturno) e o 1º atendimento do médico, e o maior intervalo entre dois atendimentos no mesmo plantão. Período inteiro.' + (turnoAtual ? ' (O filtro de turno não se aplica a esta tabela.)' : '')));
   if (!lista.length) { box.append(el('p', 'notice', 'Sem consultas no período.')); return box; }
@@ -360,7 +363,7 @@ export function mountProduction(storage, seed) {
 
  function tabelaCruzamento() {
   const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
-  const linhas = cruzamento(filtra(dados.registros), escalas);
+  const linhas = cruzamento(filtra(dados.registros), escalas).filter(casaMedico);
   const box = el('section', 'prod-section');
   box.append(el('h3', '', 'Escala × produção'), el('p', 'chart-sub', `${escalas.length} plantões no período · consultórios adulto e pediátrico da escala comparados com as consultas registradas no Gestor Saúde.`));
   const tabela = el('table', 'prod-table'), head = el('tr');
@@ -408,7 +411,7 @@ export function mountProduction(storage, seed) {
   updated.textContent = dados.atualizadoEm ? `${dados.emAndamento ? 'Em andamento · ' : ''}lido às ${new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}` : '';
   alerta.hidden = dados.disponivel;
   if (!dados.disponivel) alerta.textContent = `Não foi possível ler a produção agora: ${dados.erro || 'falha na leitura'}${dados.registros?.length ? ' Mostrando a última leitura válida.' : ''}`;
-  lista = ranking(filtra(dados.registros));
+  lista = ranking(filtra(dados.registros)).filter(casaMedico);
   const comConsulta = lista.filter(m => m.total), total = comConsulta.reduce((s, m) => s + m.total, 0);
   // Comparação: mesmos indicadores no outro período, com a variação em %.
   const base = comparado?.registros ? ranking(filtra(comparado.registros)).filter(m => m.total) : null;
@@ -426,8 +429,10 @@ export function mountProduction(storage, seed) {
   const agrupamento = $('.prod-group').value, tabelas = $('.prod-tables');
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
-  if (agrupamento !== 'total') tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking(), tabelaEquipes(), tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento());
+  if (agrupamento !== 'total' && !buscaAtual) tabelas.append(tabelaGrupos(agrupamento));
+  tabelas.append(tabelaRanking());
+  if (!buscaAtual) tabelas.append(tabelaEquipes());
+  tabelas.append(tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento());
  }
 
  async function carregar() {
@@ -469,6 +474,7 @@ export function mountProduction(storage, seed) {
  panel.addEventListener('change', e => { if (e.target.classList.contains('prod-turno')) { turnoAtual = e.target.value; render(); } });
  $('.prod-compare').onchange = carregar;
  $('.prod-refresh').onclick = carregar;
+ panel.addEventListener('input', e => { if (e.target.classList.contains('prod-busca')) { buscaAtual = semAcento(e.target.value.trim()); render(); } });
  // Relatório do mês: usa a impressão do navegador (Salvar como PDF). O @media print deixa só este painel.
  $('.prod-print').onclick = () => { document.body.classList.add('imprimindo-producao'); window.print(); setTimeout(() => document.body.classList.remove('imprimindo-producao'), 500); };
  window.addEventListener('afterprint', () => document.body.classList.remove('imprimindo-producao'));
