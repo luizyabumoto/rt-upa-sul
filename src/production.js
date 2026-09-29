@@ -1,6 +1,6 @@
 // Produção médica: consultas por médico a partir do relatório Produção Analítico do Gestor Saúde.
 // Retornos aparecem só como informação: dar baixa em retorno não significa ter atendido.
-import {segments, doctorIdentity} from './scheduling.js';
+import {segments, doctorIdentity, parse} from './scheduling.js';
 
 export const CLASSES = [
  ['emergencia', 'Emergência', '#FF0000'], ['muitoUrgente', 'Muito urgente', '#FF8000'], ['urgente', 'Urgente', '#FFFF00'],
@@ -383,6 +383,36 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
+ // Possíveis faltas: escalado no plantão, sem nenhuma consulta e sem troca/cobertura registrada.
+ function tabelaFaltas() {
+  const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
+  const linhas = cruzamento(filtra(dados.registros), escalas).filter(casaMedico);
+  const hist = [...parse(storage, 'historico', []), ...parse(storage, 'trocas', [])];
+  const cobre = parse(storage, 'coverages', []).filter(c => c.confirmed);
+  const justificado = (medico, data) => hist.some(h => h.data === data && mesmoMedico(h.saiu || '', medico)) || cobre.some(c => c.date === data && mesmoMedico(c.original || '', medico));
+  const faltosos = linhas.map(l => {
+   const faltas = l.semConsulta.filter(p => !justificado(l.medico, p.data));
+   return {medico: l.medico, escalados: l.escalados, faltas, justificadas: l.semConsulta.length - faltas.length};
+  }).filter(x => x.faltas.length).sort((a, b) => b.faltas.length - a.faltas.length);
+  const box = el('section', 'prod-section');
+  box.append(el('h3', '', 'Possíveis faltas'), el('p', 'chart-sub', 'Médicos escalados num plantão que não registraram nenhuma consulta e não têm troca nem cobertura registrada para aquele dia. Confira caso a caso antes de qualquer cobrança.'));
+  if (!faltosos.length) { box.append(el('p', 'notice', 'Nenhuma falta sem justificativa no período — todos os escalados atenderam ou tiveram troca/cobertura registrada.')); return box; }
+  const tabela = el('table', 'prod-table'), head = el('tr');
+  for (const [t, cls] of [['Médico'], ['Plantões na escala', 'num'], ['Possíveis faltas', 'num'], ['Datas'], ['Trocas/coberturas', 'num']]) head.append(el('th', cls || '', t));
+  const thead = el('thead'); thead.append(head); tabela.append(thead);
+  const corpo = el('tbody');
+  for (const f of faltosos) {
+   const tr = el('tr'), nome = el('td'); nome.append(botaoMedico(f.medico));
+   const datas = f.faltas.map(p => `${dataBR(p.data).slice(0, 5)} ${p.turno === 'D' ? 'D' : 'N'}`).join(', ');
+   tr.append(nome, el('td', 'num', String(f.escalados)), el('td', 'num strong alerta', String(f.faltas.length)), el('td', '', datas), el('td', 'num muted', String(f.justificadas)));
+   corpo.append(tr);
+  }
+  tabela.append(corpo);
+  const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  box.append(wrap, el('small', 'muted', 'D = diurno · N = noturno. "Trocas/coberturas" são os plantões sem consulta que já têm justificativa registrada (não contam como falta). Pode haver plantão no Box (fora dos consultórios) que não aparece aqui.'));
+  return box;
+ }
+
  function cartaoEscala() {
   const box = $('.prod-escala'); box.replaceChildren();
   const chave = $('.prod-period').value;
@@ -432,7 +462,7 @@ export function mountProduction(storage, seed) {
   if (agrupamento !== 'total' && !buscaAtual) tabelas.append(tabelaGrupos(agrupamento));
   tabelas.append(tabelaRanking());
   if (!buscaAtual) tabelas.append(tabelaEquipes());
-  tabelas.append(tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento());
+  tabelas.append(tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento(), tabelaFaltas());
  }
 
  async function carregar() {
