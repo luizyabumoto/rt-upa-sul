@@ -158,7 +158,7 @@ class RotaTests(unittest.TestCase):
 
     def test_fluxo_exige_login_e_devolve_so_numeros(self):
         self.assertEqual(request('/api/fluxo')['status'], 401)
-        online.FLUXO = PainelFluxo(PainelTests.Cliente(), cache_segundos=45)
+        online.FLUXO = PainelFluxo(PainelTests.Cliente(), relogio=lambda: AGORA.timestamp(), cache_segundos=45)
         result = request('/api/fluxo', token='test-token')
         self.assertEqual(result['status'], 200)
         body = json.loads(result['body'])

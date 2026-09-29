@@ -153,3 +153,24 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 .resumo-tile{display:grid;gap:4px;padding:16px 18px;background:#12303a;border:1px solid #2f6a73;border-radius:14px;text-align:left;color:#e3ebf5;font:inherit;cursor:default}
 button.resumo-tile{cursor:pointer}button.resumo-tile:hover{border-color:#5fc9b5}
 .resumo-label{font-size:11px;font-weight:800;letter-spacing:.08em;color:#92dfcf}.resumo-valor{font-size:30px;line-height:1.1;letter-spacing:-.5px}.resumo-tile small{color:#9fd8cc}
+/* ===== Polimento de layout ===== */
+main{padding-top:22px}
+.section-heading{margin:28px 0 6px}.section-heading h2{font-size:21px}
+#overview-panel .welcome{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+#overview-panel .welcome h2{font-size:22px;margin:4px 0}
+/* Vagas no Painel em colunas, mais compactas */
+.vagas-alerta ul{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.vagas-alerta li{background:#1c150e;border:1px solid #3a2c1c;border-radius:10px;padding:8px 10px}
+.vagas-alerta li span{font-size:13px}.vagas-alerta li button{padding:5px 10px;font-size:12px}
+/* Superfícies e respiro consistentes */
+.card,.metric,.organizer-card,.quick-view details,.coverage-line,.settings,.historico,.carga{border-radius:14px}
+.metrics{gap:12px}.metric{padding:16px 18px}.metric strong{font-size:26px;letter-spacing:-.4px}
+.quick-view{margin:22px 0}
+.day-cards{gap:12px}
+/* Barra da conta (e-mail + salvar) mais discreta */
+.account-bar{border-radius:12px;padding:12px 14px;font-size:14px}
+/* Rolagem horizontal só quando precisa, com pista suave */
+.table-wrap{border-radius:12px}
+/* Botões: altura mínima uniforme para alinhar */
+button{min-height:38px}
+@media(max-width:700px){main{padding-top:14px}.section-heading h2{font-size:19px}#overview-panel .welcome h2{font-size:20px}.resumo-valor{font-size:26px}}

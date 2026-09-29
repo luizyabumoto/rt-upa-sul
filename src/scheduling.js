@@ -57,10 +57,13 @@ export function recurringRule(seed,storage,date,weekday,slot){
 }
 export function plannedDoctor(seed,storage,date,slot){
  const weekday=new Date(date+'T12:00:00').getDay(),rule=recurringRule(seed,storage,date,weekday,slot);
- if(rule?.status==='custom')return rule.doctor;
- if(slot>=14)return rule?.doctor||'';
+ // Férias: o preenchimento AUTOMÁTICO (fixo, padrão, cinderela) não coloca um médico de férias — o posto
+ // fica vago. Não afeta a escala importada nem edições manuais (essas ficam com alerta vermelho, sem sumir).
+ const deFerias=doctor=>doctor&&vacationConflicts(storage,doctor,date,slot).length>0;
+ if(rule?.status==='custom')return deFerias(rule.doctor)?'':rule.doctor;
+ if(slot>=14)return deFerias(rule?.doctor)?'':(rule?.doctor||'');
  const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);if(exact)return exact.doctor;
- return rule?.doctor||'';
+ return deFerias(rule?.doctor)?'':(rule?.doctor||'');
 }
 export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;return Object.hasOwn(edits,key)?edits[key]:plannedDoctor(seed,storage,date,slot);}
 // Inclusão avulsa num turno de clínicos: o médico entra na primeira posição (1 a 4) sem médico
