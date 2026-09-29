@@ -13,6 +13,7 @@ import {mountDemand} from './demand.js';
 import {mountTrocas} from './trocas.js';
 import {registrarTroca, mountHistorico} from './historico.js';
 import {mountAlertasEscala} from './escala-alertas.js';
+import {mountVersoes} from './versoes.js';
 import {fortnight, WEEKDAYS} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -118,6 +119,7 @@ try{mountProduction(storage,seed);}catch(error){console.error('Produção médic
 try{mountTrocas(storage,seed);}catch(error){console.error('Trocas detectadas',error);}
 try{mountHistorico(storage);}catch(error){console.error('Histórico de trocas',error);}
 try{mountAlertasEscala(storage,seed);}catch(error){console.error('Vagas e carga',error);}
+try{mountVersoes(storage);}catch(error){console.error('Versões',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

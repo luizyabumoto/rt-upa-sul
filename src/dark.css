@@ -148,3 +148,4 @@ tr.carga-acima td{background:#2a1c14}tr.carga-acima td:first-child{color:#ffb56a
 .flow-risk.flow-estourou{border-color:#d34c4c;box-shadow:0 0 0 1px #d34c4c55 inset}
 .flow-maior-alerta{color:#ff9daa!important;font-weight:700}
 .flow-estourou-nota{margin:4px 0 0;color:#ffb4b4;font-size:12px;font-weight:700}
+.versoes-lista{display:grid;gap:8px;margin:8px 0;max-height:52vh;overflow:auto}.versao{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid #29384a;border-radius:10px}.versao span{font-size:13px}
