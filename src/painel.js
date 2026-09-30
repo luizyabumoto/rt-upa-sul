@@ -3,8 +3,7 @@
 import {plantaoAtual} from './production.js';
 import {slots} from './scheduling.js';
 import {lerProducao} from './resumo.js';
-import {escaladosComArea, historico, avaliarPlantao, atualizarAcompanhamento, lerAcompanhamento, registrarConversa, desfazerConversa, indice, situacao, JANELA_DIAS, ENTRA} from './atencao.js';
-import {doctorIdentity} from './scheduling.js';
+import {escaladosComArea, historico, avaliarPlantao, atualizarAcompanhamento, lerAcompanhamento, registrarConversa, desfazerConversa, chaveSalva, indice, situacao, JANELA_DIAS, ENTRA} from './atencao.js';
 
 const HORA = 3600000;
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
@@ -120,7 +119,7 @@ export function mountAtencao(storage, seed) {
  function todos(acomp) {
   const det = el('details', 'atc-todos');
   const lista = (hist || []).map(h => {
-   const v = indice(h.plantoes), salvo = acomp[doctorIdentity(h.medico)];
+   const v = indice(h.plantoes), salvo = acomp[chaveSalva(acomp, h.medico)];
    return {medico: h.medico, plantoes: h.plantoes.length, indice: v, situacao: situacao(v, salvo?.emAtencao ? 'atencao' : undefined)};
   }).filter(m => m.indice !== null).sort((a, b) => a.indice - b.indice);
   const n = lista.filter(m => m.situacao === 'atencao').length;
@@ -155,7 +154,7 @@ export function mountAtencao(storage, seed) {
   if (!hist) { host.append(el('p', 'empty-state', erro ? `Produção indisponível agora: ${erro}` : 'Lendo a produção dos últimos dias…')); return; }
   // Guarda quem entrou ou saiu da atenção (todos os médicos com dados, não só os de hoje).
   const avaliacoesTodos = hist.map(h => {
-   const salvo = lerAcompanhamento(storage)[doctorIdentity(h.medico)];
+   const salvos = lerAcompanhamento(storage), salvo = salvos[chaveSalva(salvos, h.medico)];
    return {nome: h.medico, situacao: situacao(indice(h.plantoes), salvo?.emAtencao ? 'atencao' : undefined)};
   });
   const acomp = atualizarAcompanhamento(storage, avaliacoesTodos, hoje);

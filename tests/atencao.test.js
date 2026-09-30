@@ -76,3 +76,13 @@ test('avaliação do plantão: quem está abaixo vem primeiro, com a evolução 
  assert.equal(caio.abaixoHoje, true);             // 4 contra 12 dos colegas agora
  assert.equal(lista.find(a => a.nome === 'ANA LIMA').situacao, 'ok');
 });
+
+test('conversa e status ficam no mesmo registro mesmo com nome diferente na escala e no Gestor Saúde', () => {
+ const storage = new MemoryStore();
+ atualizarAcompanhamento(storage, [{nome: 'ANA PAULA DA SILVA', situacao: 'atencao'}], '2026-09-28');
+ registrarConversa(storage, 'ANA PAULA SILVA\nCRM 123 - SMS', '2026-09-29');
+ const dados = Object.values(lerAcompanhamento(storage));
+ assert.equal(dados.length, 1);
+ assert.equal(dados[0].emAtencao, true);
+ assert.deepEqual(dados[0].conversas, ['2026-09-29']);
+});

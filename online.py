@@ -67,7 +67,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|atencao|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -140,6 +140,19 @@ def validate_items(items):
                     raise ApiError(400, 'Registro de troca inválido.')
                 if any(not isinstance(item[k], str) or len(item[k]) > 500 for k in ('id', 'saiu', 'entrou', 'motivo', 'criadoEm')) or len(item['motivo']) > 300:
                     raise ApiError(400, 'Registro de troca inválido.')
+        elif name == 'atencao':
+            # Médicos que merecem atenção (Painel): quando entrou, saiu e as datas das conversas do RT.
+            if not isinstance(parsed, dict) or len(parsed) > 500:
+                raise ApiError(400, 'Acompanhamento de médicos inválido.')
+            data_ok = lambda v: v is None or (isinstance(v, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', v))
+            for chave, item in parsed.items():
+                if len(chave) > 500 or not isinstance(item, dict) or set(item) - {'nome', 'emAtencao', 'desde', 'conversas', 'saiuEm'}:
+                    raise ApiError(400, 'Acompanhamento de médico inválido.')
+                conversas = item.get('conversas', [])
+                if not isinstance(item.get('nome'), str) or len(item['nome']) > 500 or type(item.get('emAtencao', False)) is not bool \
+                        or not data_ok(item.get('desde')) or not data_ok(item.get('saiuEm')) \
+                        or not isinstance(conversas, list) or len(conversas) > 20 or not all(data_ok(d) and d for d in conversas):
+                    raise ApiError(400, 'Acompanhamento de médico inválido.')
         elif name == 'trocas':
             # Trocas detectadas pela produção (aplicadas automaticamente ou desfeitas): histórico para o alerta do Painel.
             if not isinstance(parsed, list) or len(parsed) > 2000:

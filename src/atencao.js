@@ -96,7 +96,7 @@ export function atualizarAcompanhamento(storage, avaliacoes, hoje) {
  const dados = lerAcompanhamento(storage);
  let mudou = false;
  for (const a of avaliacoes) {
-  const id = doctorIdentity(a.nome), atual = dados[id];
+  const id = chaveSalva(dados, a.nome), atual = dados[id];
   if (a.situacao === 'atencao' && !atual?.emAtencao) { dados[id] = {...(atual || {conversas: []}), nome: a.nome, emAtencao: true, desde: hoje, saiuEm: null}; mudou = true; }
   else if (a.situacao === 'ok' && atual?.emAtencao) { dados[id] = {...atual, emAtencao: false, saiuEm: hoje}; mudou = true; }
  }
@@ -104,8 +104,15 @@ export function atualizarAcompanhamento(storage, avaliacoes, hoje) {
  return dados;
 }
 
+// Nome da escala e do Gestor Saúde podem diferir ("ANA PAULA SILVA" × "ANA PAULA DA SILVA"): acha o registro pelos dois.
+export function chaveSalva(dados, nome) {
+ const id = doctorIdentity(nome);
+ if (dados[id]) return id;
+ return Object.keys(dados).find(k => mesmoMedico(dados[k]?.nome || '', nomeDe(nome))) || id;
+}
+
 export function registrarConversa(storage, nome, hoje) {
- const dados = lerAcompanhamento(storage), id = doctorIdentity(nome);
+ const dados = lerAcompanhamento(storage), id = chaveSalva(dados, nome);
  const atual = dados[id] || {nome, emAtencao: false, desde: null, conversas: [], saiuEm: null};
  if (!atual.conversas.includes(hoje)) atual.conversas = [...atual.conversas, hoje].slice(-20);
  dados[id] = atual;
@@ -113,7 +120,7 @@ export function registrarConversa(storage, nome, hoje) {
 }
 
 export function desfazerConversa(storage, nome, hoje) {
- const dados = lerAcompanhamento(storage), atual = dados[doctorIdentity(nome)];
+ const dados = lerAcompanhamento(storage), atual = dados[chaveSalva(dados, nome)];
  if (!atual) return;
  atual.conversas = atual.conversas.filter(d => d !== hoje);
  storage.setItem('rt-upa:atencao', JSON.stringify(dados));
@@ -127,7 +134,7 @@ export function avaliarPlantao({escala, hist, agora = [], acompanhamento = {}, e
   const h = hist.find(x => mesmoMedico(x.medico, m.nome));
   const plantoes = h?.plantoes || [];
   const valor = indice(plantoes);
-  const salvo = acompanhamento[doctorIdentity(m.doctor || m.nome)] || acompanhamento[doctorIdentity(m.nome)];
+  const salvo = acompanhamento[chaveSalva(acompanhamento, m.nome)];
   const sit = situacao(valor, salvo?.emAtencao ? 'atencao' : undefined);
   const ultimaConversa = salvo?.conversas?.at(-1) || null;
   const depois = ultimaConversa ? plantoes.filter(p => p.data > ultimaConversa) : [];

@@ -8,6 +8,36 @@ export class MemoryStore {
   snapshot() { return Object.fromEntries(this.items); }
 }
 
+// Junta as alterações deste aparelho (local, feitas desde a última sincronização "base") com o que outro aparelho
+// salvou (remoto). Registro que só um lado mudou fica com esse lado. Se os dois mudaram o mesmo registro:
+// objetos são juntados campo a campo e listas com "id" item a item; no resto, vale o deste aparelho.
+export function mergeItems(base, local, remoto) {
+  const result = {...remoto};
+  const json = texto => { try { return JSON.parse(texto); } catch { return undefined; } };
+  const plano = v => v && typeof v === 'object' && !Array.isArray(v);
+  const comId = v => Array.isArray(v) && v.every(x => plano(x) && typeof x.id === 'string');
+  for (const chave of new Set([...Object.keys(base), ...Object.keys(local)])) {
+    if (local[chave] === base[chave]) continue;                       // só o outro aparelho pode ter mudado
+    if (!(chave in local)) { delete result[chave]; continue; }
+    if (!(chave in remoto) || remoto[chave] === base[chave]) { result[chave] = local[chave]; continue; }
+    const [b, l, r] = [json(base[chave] ?? 'null'), json(local[chave]), json(remoto[chave])];
+    if (plano(l) && plano(r) && (b === null || plano(b))) {
+      const saida = {...r}, antes = b || {};
+      for (const campo of new Set([...Object.keys(antes), ...Object.keys(l)])) {
+        if (JSON.stringify(l[campo]) === JSON.stringify(antes[campo])) continue;
+        if (campo in l) saida[campo] = l[campo]; else delete saida[campo];
+      }
+      result[chave] = JSON.stringify(saida);
+    } else if (comId(l) && comId(r) && (b === null || comId(b))) {
+      const antes = new Map((b || []).map(x => [x.id, JSON.stringify(x)])), meus = new Map(l.map(x => [x.id, x]));
+      const saida = r.filter(x => meus.has(x.id) || !antes.has(x.id)).map(x => meus.has(x.id) && JSON.stringify(meus.get(x.id)) !== antes.get(x.id) ? meus.get(x.id) : x);
+      for (const x of l) if (!antes.has(x.id) && !r.some(y => y.id === x.id)) saida.push(x);
+      result[chave] = JSON.stringify(saida);
+    } else result[chave] = local[chave];
+  }
+  return result;
+}
+
 export async function connectStore() {
   const sessionResponse = await fetch('/api/session');
   if (!sessionResponse.ok) throw new Error('Sessão indisponível. Entre novamente em outra aba e recarregue esta página.');
@@ -16,7 +46,8 @@ export async function connectStore() {
   const response = await fetch('/api/state');
   if (!response.ok) throw new Error('Não foi possível carregar a escala salva. Recarregue para tentar novamente.');
   const state = await response.json();
-  let revision = state.revision, dirty = false, saving = false, generation = 0, autoTimer;
+  // base: como os dados estavam no servidor na última sincronização (para juntar com outro aparelho).
+  let revision = state.revision, dirty = false, saving = false, generation = 0, autoTimer, base = {...state.items};
   const banner = document.createElement('div');
   banner.className = 'toolbar account-bar';
   banner.style.marginBottom = '16px';
@@ -37,10 +68,24 @@ export async function connectStore() {
     const sentGeneration = generation;
     status.textContent = 'Salvando…';
     try {
-      const result = await fetch('/api/state', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:store.snapshot(), revision})});
-      const data = await result.json();
+      const enviar = async items => { const r = await fetch('/api/state', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items, revision})}); return {r, data: await r.json().catch(() => ({}))}; };
+      let items = store.snapshot(), {r: result, data} = await enviar(items);
+      // Outro aparelho salvou antes: junta as duas versões e tenta de novo, em vez de travar o salvamento.
+      for (let tentativa = 0; result.status === 409 && tentativa < 3; tentativa++) {
+        status.textContent = 'Juntando com as alterações de outro aparelho…';
+        const r = await fetch('/api/state', {cache:'no-store'});
+        if (!r.ok) break;
+        const latest = await r.json();
+        const local = store.snapshot();
+        items = mergeItems(base, local, latest.items);
+        base = {...latest.items}; revision = latest.revision;
+        // O que foi alterado nesta tela enquanto buscava continua valendo.
+        store.items = new Map(Object.entries(items));
+        ({r: result, data} = await enviar(items));
+        if (result.ok) document.dispatchEvent(new Event('rt-data-restored'));
+      }
       if (!result.ok) throw new Error(data.error || 'Não foi possível salvar.');
-      revision = data.revision; dirty = generation !== sentGeneration;
+      revision = data.revision; base = {...items}; dirty = generation !== sentGeneration;
       banner.classList.remove('erro');
       status.textContent = dirty ? 'Há novas alterações para salvar' : 'Salvo online';
     } catch (error) {
@@ -62,7 +107,7 @@ export async function connectStore() {
   setInterval(async()=>{
     if(dirty||saving||document.hidden||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
     const before=generation;
-    try{const r=await fetch('/api/state');if(!r.ok)return;const latest=await r.json();if(!dirty&&!saving&&generation===before&&latest.revision!==revision){store.items=new Map(Object.entries(latest.items));revision=latest.revision;status.textContent='Atualizado de outro dispositivo';document.dispatchEvent(new Event('rt-data-restored'));}}catch{}
+    try{const r=await fetch('/api/state');if(!r.ok)return;const latest=await r.json();if(!dirty&&!saving&&generation===before&&latest.revision!==revision){store.items=new Map(Object.entries(latest.items));revision=latest.revision;base={...latest.items};status.textContent='Atualizado de outro dispositivo';document.dispatchEvent(new Event('rt-data-restored'));}}catch{}
   },5000);
   return store;
 }
