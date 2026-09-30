@@ -118,7 +118,7 @@ export function mountEspera() {
    return;
   }
   const {classes, geral} = resumoEspera(esperas);
-  cards.append(cartao({chave: 'geral', nome: 'Geral', cor: '#2b9e8a', ...geral}), ...classes.map(cartao));
+  cards.append(cartao({chave: 'geral', nome: 'Geral', cor: '#23a896', ...geral}), ...classes.map(cartao));
   const agrupamento = $('.espera-group').value;
   if (agrupamento === 'total') return;
   const titulo = el('h3', '', `Espera média ${AGRUPAR.find(a => a[0] === agrupamento)[1].toLowerCase()}`);

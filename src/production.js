@@ -3,10 +3,11 @@
 import {segments, doctorIdentity, parse, slots} from './scheduling.js';
 import {trocasDoPlantao, cartaoSugestao, aplicarSugestao, HORAS_ANTES_DE_TROCAR} from './trocas.js';
 
+// Cores de Manchester em tons sóbrios para o fundo escuro (mesmo significado das cores do Gestor Saúde).
 export const CLASSES = [
- ['emergencia', 'Emergência', '#FF0000'], ['muitoUrgente', 'Muito urgente', '#FF8000'], ['urgente', 'Urgente', '#FFFF00'],
- ['prioridade', 'Prioridade', '#8a11b6'], ['poucoUrgente', 'Pouco urgente', '#008000'], ['naoUrgente', 'Não urgente', '#0000FF'],
- ['procedimentos', 'Procedimentos', '#0d0d0d'], ['semClassificacao', 'Sem classificação', '#C0C0C0'], ['outros', 'Outros', '#888888']];
+ ['emergencia', 'Emergência', '#e5484d'], ['muitoUrgente', 'Muito urgente', '#f0883e'], ['urgente', 'Urgente', '#e2b33c'],
+ ['prioridade', 'Prioridade', '#a071e6'], ['poucoUrgente', 'Pouco urgente', '#3fb772'], ['naoUrgente', 'Não urgente', '#4c8dea'],
+ ['procedimentos', 'Procedimentos', '#5b6474'], ['semClassificacao', 'Sem classificação', '#8391a7'], ['outros', 'Outros', '#6b7688']];
 export const PERIODOS = [['atual', 'Plantão atual · tempo real'], ['anterior', 'Plantão anterior'], ['hoje', 'Hoje (desde 07h)'], ['ontem', 'Ontem (07h a 07h)'],
  ['semana', 'Últimos 7 dias'], ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['livre', 'Escolher datas…']];
 export const AGRUPAR = [['total', 'Período inteiro'], ['plantao', 'Por plantão'], ['dia', 'Por dia'], ['semana', 'Por semana'], ['mes', 'Por mês']];
@@ -435,8 +436,8 @@ export function mountProduction(storage, seed) {
   box.append(el('h3', '', 'Possíveis faltas e trocas'), el('p', 'chart-sub', 'Posto a posto: quem estava na escala e não registrou nenhuma consulta, as trocas que a produção detectou e os postos vagos em que alguém atendeu. Confira caso a caso antes de qualquer cobrança.'));
   if (!linhas.length) { box.append(el('p', 'notice', 'Nenhuma falta ou troca no período: todos os escalados dos consultórios registraram consultas.')); return box; }
   const resumo = el('div', 'faltas-resumo');
-  for (const [rotulo, tipos, cls] of [['possíveis faltas', ['falta'], 'falta'], ['trocas detectadas pela produção', ['producao'], 'producao'], ['vagas preenchidas', ['vaga'], 'vaga'], ['justificadas (cobertura ou troca registrada)', ['cobertura', 'manual'], 'justificada']]) {
-   const n = conta(tipos); if (n) resumo.append(el('span', `faltas-chip ${cls}`, `${n} ${rotulo}`));
+  for (const [um, varios, tipos, cls] of [['possível falta', 'possíveis faltas', ['falta'], 'falta'], ['troca detectada pela produção', 'trocas detectadas pela produção', ['producao'], 'producao'], ['vaga preenchida', 'vagas preenchidas', ['vaga'], 'vaga'], ['justificada (cobertura ou troca registrada)', 'justificadas (cobertura ou troca registrada)', ['cobertura', 'manual'], 'justificada']]) {
+   const n = conta(tipos); if (n) resumo.append(el('span', `faltas-chip ${cls}`, `${n} ${n === 1 ? um : varios}`));
   }
   box.append(resumo);
   const SITUACAO = {falta: 'Possível falta', producao: 'Troca detectada pela produção', vaga: 'Posto vago preenchido', cobertura: 'Cobertura confirmada', manual: 'Troca registrada na escala'};

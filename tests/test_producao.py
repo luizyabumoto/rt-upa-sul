@@ -279,6 +279,12 @@ class EsperaTests(unittest.TestCase):
         self.assertIn('dataChegada', cliente.campos_relatorio)
         self.assertNotIn('NOME DO PACIENTE', repr(linhas))
 
+    def test_crm_do_profissional_quando_o_relatorio_traz(self):
+        from gestor_saude import crm_do_atendimento
+        self.assertEqual(crm_do_atendimento({'profissional': 'ANA', 'profissionalConselho': 'CRM-MT 17.411'}), '17411')
+        self.assertEqual(crm_do_atendimento({'numeroConselho': '12'}), None)      # curto demais: não é CRM
+        self.assertIsNone(crm_do_atendimento({'profissional': 'ANA'}))
+
 
 if __name__ == '__main__':
     unittest.main()

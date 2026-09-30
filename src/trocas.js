@@ -4,6 +4,7 @@
 import {parse, periodKey, baseDoctor, segments, doctorChoices, affiliation, MISSING_CRM, bounds} from './scheduling.js';
 import {plantaoAtual, mesmoMedico} from './production.js';
 import {registrarTroca} from './historico.js';
+import {completarCrms} from './cadastro.js';
 
 export const MINIMO_CONSULTAS = 5;          // troca automática: quem entrou atendeu pelo menos isso no plantão
 export const MINIMO_SUGESTAO = 3;           // abaixo disso nem sugere (pode ser só uma ajuda pontual)
@@ -210,6 +211,8 @@ export function mountTrocas(storage, seed) {
     const registros = dados.registros.filter(x => x.data === plantao.data && x.turno === plantao.turno);
     const resultado = aplicarTrocas(seed, storage, plantao, registros);
     mudou ||= resultado.mudou;
+    // CRM "A CONFIRMAR" preenchido sozinho quando o relatório do Gestor Saúde traz o registro do profissional.
+    mudou ||= completarCrms(storage, doctorChoices(seed, storage), dados.crmProfissionais).length > 0;
     novas.push(...resultado.suspeitas.map(s => ({...s, plantao: {data: plantao.data, turno: plantao.turno}})));
    } catch { /* sem conexão com o Gestor Saúde agora: tenta na próxima */ }
   }

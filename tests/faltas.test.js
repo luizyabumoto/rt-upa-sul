@@ -28,6 +28,8 @@ test('depois da troca automática a falta continua aparecendo, como troca detect
  const adulto = linhas.filter(l => l.slot < 11);
  assert.deepEqual(adulto.map(l => [l.slot, l.tipo]), [[9, 'producao'], [10, 'vaga']]);
  assert.match(adulto[0].escalado, /^ANA PAULA/);
+ // Quem entrou aparece com as consultas que fez no plantão.
+ assert.deepEqual(adulto.map(l => [l.substituto.split(' ')[0], l.consultasSubstituto]), [['MARCELA', 5], ['MARIA', 6]]);
  assert.equal(linhas.find(l => l.slot === 12).tipo, 'falta');
 });
 

@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, slot_bounds, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
@@ -67,7 +67,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -146,7 +146,7 @@ def validate_items(items):
                 raise ApiError(400, 'Histórico de trocas inválido.')
             campos = {'id', 'data', 'turno', 'slot', 'saiu', 'entrou', 'consultas', 'status', 'criadoEm'}
             for item in parsed:
-                if not isinstance(item, dict) or set(item) != campos or item['status'] not in ('aplicada', 'mantida', 'desfeita') or item['turno'] not in ('D', 'N'):
+                if not isinstance(item, dict) or set(item) != campos or item['status'] not in ('aplicada', 'mantida', 'desfeita', 'ignorada') or item['turno'] not in ('D', 'N'):
                     raise ApiError(400, 'Troca inválida.')
                 if type(item['slot']) is not int or not 0 <= item['slot'] <= 13 or type(item['consultas']) is not int or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(item['data'])):
                     raise ApiError(400, 'Troca inválida.')
@@ -168,6 +168,24 @@ def validate_items(items):
                 if 'repeatExtra' in item and type(item['repeatExtra']) is not bool:raise ApiError(400,'Repetição inválida.')
                 if 'EXTRA' in item['doctor'].upper() and item.get('repeatExtra') is not True:raise ApiError(400,'Confirme a repetição semanal do extra.')
                 seen.add(key)
+        elif name == 'clinicoRoster':
+            # "Clínico (qualquer)": médico que preenche o posto de clínico que sobrar vago naquele dia e turno.
+            if not isinstance(parsed, list) or len(parsed) > 2000:
+                raise ApiError(400, 'Lista de clínicos inválida.')
+            for item in parsed:
+                if not isinstance(item, dict) or set(item) != {'id', 'start', 'weekday', 'turn', 'doctor', 'active'} or item['turn'] not in ('dia', 'noite') \
+                        or type(item['weekday']) is not int or not 0 <= item['weekday'] <= 6 or type(item['active']) is not bool \
+                        or not isinstance(item['id'], str) or not 1 <= len(item['id']) <= 100 or not isinstance(item['doctor'], str) or len(item['doctor']) > 500 \
+                        or not isinstance(item['start'], str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', item['start']):
+                    raise ApiError(400, 'Clínico (qualquer) inválido.')
+        elif name == 'excluidos':
+            # Médicos excluídos do cadastro (a partir de uma data): só identificação e nome.
+            if not isinstance(parsed, list) or len(parsed) > 2000:
+                raise ApiError(400, 'Lista de excluídos inválida.')
+            for item in parsed:
+                if not isinstance(item, dict) or set(item) != {'id', 'nome', 'desde', 'em'} or any(not isinstance(item[k], str) or len(item[k]) > 300 for k in item) \
+                        or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', item['desde']):
+                    raise ApiError(400, 'Médico excluído inválido.')
         elif name in ('doctors', 'fixed', 'absences'):
             if not isinstance(parsed, list) or len(parsed) > 2000:
                 raise ApiError(400, 'Lista inválida.')
@@ -253,8 +271,10 @@ def app(environ, start_response):
             if path == '/icon.png':
                 return respond(200, base64.b64decode((ROOT / 'icon.png.b64').read_text()), 'image/png')
             return respond(200, (ROOT / path.lstrip('/')).read_bytes(), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json')
-        if path == '/src/dark.css' and method == 'GET':
-            return respond(200,(ROOT/'src/dark.css').read_bytes(),'text/css; charset=utf-8')
+        if path in ('/src/dark.css', '/src/theme.css') and method == 'GET':
+            return respond(200,(ROOT/path.lstrip('/')).read_bytes(),'text/css; charset=utf-8')
+        if path == '/src/inter.woff2' and method == 'GET':
+            return respond(200,(ROOT/'src/inter.woff2').read_bytes(),'font/woff2')
         if path == '/login' and method == 'GET':
             return respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
         if path == '/src/login.js' and method == 'GET':

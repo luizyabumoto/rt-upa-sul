@@ -42,7 +42,9 @@ function pinnedRule(seed,storage,date,weekday,slot){
 function nonGenericResolution(seed,storage,date,weekday,slot){
  const rule=pinnedRule(seed,storage,date,weekday,slot);
  if(rule?.status==='custom'||slot>=14)return rule;
- const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);
+ // A escala importada só vale para o próprio dia: consultando outro dia da semana (aba Médicos e fixos),
+ // ela não pode ser repetida como se fosse fixo daquele dia.
+ const exact=new Date(date+'T12:00:00').getDay()===weekday&&seed.assignments.find(x=>x.date===date&&x.slot===slot);
  if(exact)return {doctor:exact.doctor,status:'regular'};
  return rule;
 }
@@ -173,7 +175,8 @@ export function doctorChoices(seed,storage){
  for(const item of seed.assignments)add(item.doctor,1);
  for(const pattern of seed.patterns||[])for(const rule of pattern.rules||[])add(rule.doctor,1);
  const pick=byText=>[...byText].sort((a,b)=>b[1]-a[1]||(crmNumber(a[0])?0:1)-(crmNumber(b[0])?0:1)||AFFILIATIONS.indexOf(affiliation(a[0]))-AFFILIATIONS.indexOf(affiliation(b[0])))[0][0];
- return [...counts.values()].map(pick).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+ const removed=new Set(parse(storage,'excluidos',[]).map(x=>x.id));
+ return [...counts.values()].map(pick).filter(d=>!removed.has(doctorIdentity(d))).sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
 // Lista para um seletor: o médico atual aparece com o vínculo que já está no plantão.
 export function doctorOptions(choices,current){

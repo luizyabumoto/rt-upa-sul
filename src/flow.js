@@ -27,9 +27,12 @@ function tile(rotulo, valor, detalhe) {
 // Tempo-alvo de espera do Protocolo de Manchester, por classificação (em minutos).
 export const ALVO_MANCHESTER = {vermelho: 0, laranja: 10, amarelo: 60, verde: 120, azul: 240};
 
+// Tons sóbrios das cores de Manchester para o fundo escuro; a cor original do Gestor Saúde fica de reserva.
+const TOM = {vermelho: '#e5484d', laranja: '#f0883e', amarelo: '#e2b33c', roxo: '#a071e6', verde: '#3fb772', azul: '#4c8dea', preto: '#5b6474', cinza: '#8391a7'};
+
 function riskCard(c) {
  const card = el('article', 'flow-risk');
- card.style.setProperty('--risk', c.cor);
+ card.style.setProperty('--risk', TOM[c.chave] || c.cor);
  const alvo = ALVO_MANCHESTER[c.chave];
  const estourou = alvo !== undefined && c.maiorEspera !== null && c.maiorEspera > alvo;
  if (estourou) card.classList.add('flow-estourou');

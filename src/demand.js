@@ -6,8 +6,9 @@ import {plantaoAtual, CLASSES} from './production.js';
 import {formatarEspera} from './flow.js';
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const COR = '#2b9e8a', PICO = '#c98233';       // validadas contra o fundo escuro (dataviz: todas as checagens passam)
+const COR = '#23a896', PICO = '#e0a44a';       // verde-azulado do tema e âmbar do pico, legíveis no fundo escuro
 const HORA_MS = 3600000, DIA_MS = 24 * HORA_MS;
+const ROTULO_CURTO = {emergencia: 'Emergência', muitoUrgente: 'Muito urg.', urgente: 'Urgente', prioridade: 'Prioridade', poucoUrgente: 'Pouco urg.', naoUrgente: 'Não urg.', procedimentos: 'Proced.', semClassificacao: 'Sem class.', outros: 'Outros'};
 export const PERIODOS_DEMANDA = [['atual', 'Plantão atual'], ['anterior', 'Plantão anterior'], ['plantao', 'Um plantão específico…'],
  ['hoje', 'Hoje (00h até agora)'], ['ontem', 'Ontem (00h–24h)'], ['7', 'Últimos 7 dias'], ['semana', 'Esta semana (desde segunda)'], ['semanaPassada', 'Semana passada'],
  ['30', 'Últimos 30 dias'], ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['90', 'Últimos 90 dias'],
@@ -228,7 +229,7 @@ export function mountDemand(storage, seed) {
   const graficos = [];
   if (!curto) graficos.push(colunas({titulo: 'Média de consultas por dia da semana', subtitulo: 'Qual dia costuma ser mais pesado', itens: a.semana, rotulo: s => s.nome.slice(0, 3), valor: s => s.media, dica: s => `${s.nome} · ${s.dias} dias no período: ${numero(s.media, 1)} consultas em média`}));
   graficos.push(colunas({titulo: curto ? 'Consultas por hora' : 'Média de consultas por hora do dia', subtitulo: curto ? 'Cada barra é uma hora do período' : 'Horários de maior procura (média de todos os dias)', itens: a.hora, rotulo: h => `${h.hora}h`, valor: h => h.media, rotuloEixo: (_, i) => i % 3 === 0, dica: h => `${String(h.hora).padStart(2, '0')}h–${String((h.hora + 1) % 24).padStart(2, '0')}h: ${numero(h.media, 1)} consultas${curto ? '' : ' em média'}`}));
-  if (a.espera.length) graficos.push(colunas({titulo: 'Espera média por classificação', subtitulo: 'Do encaminhamento ao consultório até o atendimento médico', itens: a.espera, rotulo: e => e.nome.split(' ').map(p => p.slice(0, 4)).join(' '), valor: e => e.media, formato: formatarEspera,
+  if (a.espera.length) graficos.push(colunas({titulo: 'Espera média por classificação', subtitulo: 'Do encaminhamento ao consultório até o atendimento médico', itens: a.espera, rotulo: e => ROTULO_CURTO[e.chave] || e.nome, valor: e => e.media, formato: formatarEspera,
    dica: e => `${e.nome} · ${numero(e.n)} atendimentos: ${formatarEspera(e.media)} de espera média`}));
   if (plantoes.length >= 2 && plantoes.length <= 62) graficos.push(colunas({titulo: 'Consultas por plantão', subtitulo: 'Diurno 07h–19h · noturno 19h–07h', itens: plantoes, rotulo: p => `${dataBR(p.data).slice(0, 5)} ${p.turno}`, valor: p => p.total, formato: v => numero(v), rotuloEixo: (_, i) => i % Math.max(1, Math.ceil(plantoes.length / 10)) === 0,
    dica: p => `${nomePlantao(p)}: ${numero(p.total)} consultas (adulto ${p.adulto} · pediatria ${p.pediatria})`}));

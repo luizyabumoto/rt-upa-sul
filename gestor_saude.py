@@ -161,6 +161,18 @@ CAMPOS_CHEGADA = ('chegada', 'dataChegada', 'dataHoraChegada', 'horaChegada', 'd
 ESPERA_MAXIMA_MIN = 12 * 60   # acima disso é registro esquecido, não espera real
 
 
+# Número do conselho (CRM) do profissional, quando o relatório trouxer. Dado público do médico, nunca do paciente.
+CAMPOS_CRM = ('profissionalConselho', 'numeroConselho', 'nrConselho', 'conselhoNumero', 'registroConselho', 'profissionalCrm', 'crm', 'numeroCrm', 'profissionalRegistro')
+
+
+def crm_do_atendimento(atendimento):
+    for campo in CAMPOS_CRM:
+        numero = ''.join(ch for ch in str(atendimento.get(campo) or '') if ch.isdigit())
+        if 3 <= len(numero) <= 8:
+            return numero
+    return None
+
+
 def _chegada_relatorio(atendimento):
     for campo in CAMPOS_CHEGADA:
         if atendimento.get(campo):
@@ -274,6 +286,7 @@ class GestorSaude:
         self.abrir, self.relogio = abrir, relogio
         self.token, self.expira, self.tipos = None, 0, None
         self.campos_relatorio = []
+        self.crms = {}   # nome do profissional -> CRM, quando o relatório traz
         self.trava = threading.Lock()
 
     @property
@@ -381,6 +394,9 @@ class GestorSaude:
                             self.campos_relatorio = sorted(atendimento)   # só os nomes dos campos, para diagnóstico
                         momento = _horario(atendimento.get('dataAtendimento'))
                         # Descarta aqui os dados do paciente; o limite evita contar duas vezes na emenda das partes.
+                        crm = crm_do_atendimento(atendimento)
+                        if crm and atendimento.get('profissional'):
+                            self.crms[atendimento['profissional'].strip()] = crm
                         if momento and parte <= momento < ate + timedelta(minutes=1) and (momento < fim + timedelta(minutes=1)):
                             linhas[chave].append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento,
                                                   atendimento.get('classificacaoDescricao'), _chegada_relatorio(atendimento)))
@@ -456,7 +472,8 @@ class PainelProducao:
                              'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
                              **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas), 'atrasos': resumir_atrasos(linhas),
                                                 'esperas': resumir_espera(linhas)})(self.cliente.producao(inicio, fim)),
-                             'camposRelatorio': getattr(self.cliente, 'campos_relatorio', [])}
+                             'camposRelatorio': getattr(self.cliente, 'campos_relatorio', []),
+                             'crmProfissionais': dict(getattr(self.cliente, 'crms', {}))}
             except GestorSaudeError as erro:
                 if guardado:
                     return {**guardado[1], 'disponivel': False, 'erro': str(erro)}
