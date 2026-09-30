@@ -1,0 +1,55 @@
+import tempfile
+import unittest
+from pathlib import Path
+from zipfile import ZipFile
+from xml.etree import ElementTree as E
+
+from export_excel import Q, export_cinderela, slot_bounds, hours_label, fortnight_of
+
+
+def celulas(caminho):
+    with ZipFile(caminho) as z:
+        arvore = E.fromstring(z.read('xl/worksheets/sheet1.xml'))
+        compartilhados = [''.join(si.itertext()) for si in E.fromstring(z.read('xl/sharedStrings.xml'))]
+    texto = lambda c: compartilhados[int(c.find(Q('v')).text)] if c.get('t') == 's' else ''.join(c.itertext())
+    return {c.get('r'): texto(c) for c in arvore.iter(Q('c'))}, arvore
+
+
+class CinderelaQuinzenalTests(unittest.TestCase):
+    def test_horarios_mudam_em_outubro(self):
+        self.assertEqual((slot_bounds(14, '2026-09-30'), slot_bounds(15, '2026-09-30')), ((12, 18), (18, 24)))
+        self.assertEqual((slot_bounds(14, '2026-10-01'), slot_bounds(15, '2026-10-01')), ((11, 17), (12, 18)))
+        self.assertEqual((hours_label(14, '2026-10-01'), hours_label(15, '2026-10-01')), ('11h às 17h', '12h às 18h'))
+        self.assertEqual(hours_label(15, '2026-09-30'), '18h às 00h')
+
+    def test_quinzena_de_outubro_com_cabecalho_da_upa_sul_e_blocos_semanais(self):
+        self.assertEqual(fortnight_of('2026-10-20')[:3], (2026, 10, 2))
+        with tempfile.TemporaryDirectory() as pasta:
+            saida = Path(pasta) / 'c.xlsx'
+            info = export_cinderela('2026-10-05', {}, saida)
+            self.assertEqual(info, {'ano': 2026, 'mes': 10, 'quinzena': 1, 'semanas': 3})
+            c, arvore = celulas(saida)
+        self.assertIn('YABUMOTO', c['D1'])
+        self.assertIn('UPA  SUL', c['D2'])
+        self.assertEqual(c['A2'], 'COMPETÊNCIA: 1 a 15 de Outubro de 2026')
+        # 01/10/2026 é quinta: o 1º bloco começa na coluna F (quinta) com o dia 1.
+        self.assertEqual([c['C3'], c['F4'], c['I4']], ['SEGUNDA', '1', '4'])
+        self.assertEqual([c['B5'], c['B6']], ['11h às 17h', '12h às 18h'])
+        self.assertEqual(c['H5'], 'X')                           # sábado sem cinderela
+        self.assertTrue(c['F5'] and c['F5'] != 'VAGO')           # padrão semanal fixo preenche o dia
+        self.assertEqual([c['C12'], c['F12']], ['12', '15'])     # último bloco termina no dia 15
+        self.assertEqual(c.get('G13', ''), '')                  # 16/10 já é da outra quinzena
+        self.assertEqual([c['A15'], c['A17']], ['VISITA', 'VISITA DIURNO'])
+        self.assertIn('ESCALA SUJEITA', c['A19'])
+        merges = [m.get('ref') for m in arvore.find(Q('mergeCells'))]
+        self.assertIn('A19:I19', merges)
+
+    def test_quinzena_que_toca_quatro_semanas(self):
+        # 16/08/2026 é domingo: 16 | 17-23 | 24-30 | 31.
+        with tempfile.TemporaryDirectory() as pasta:
+            info = export_cinderela('2026-08-20', {}, Path(pasta) / 'c.xlsx')
+        self.assertEqual(info['semanas'], 4)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -30,7 +30,7 @@ export function validateReplacement(seed,storage,proposal){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!original||!doctor||!Number.isInteger(slot)||slot<0||slot>15)throw new Error('Confira data, os dois médicos e o posto.');
  if(doctorIdentity(original)===doctorIdentity(doctor))throw new Error('Escolha um médico diferente para a cobertura.');
  if(baseDoctor(seed,storage,date,slot)!==original)throw new Error('O médico previsto mudou. Analise novamente antes de confirmar.');
- const [start,end]=bounds(slot);validateCoverage({date,slot,start,end,doctor},parse(storage,'coverages',[]));
+ const [start,end]=bounds(slot,date);validateCoverage({date,slot,start,end,doctor},parse(storage,'coverages',[]));
  const vacations=vacationConflicts(storage,doctor,date,slot);if(vacations.length)throw new Error(vacationMessage(vacations[0])+' Escolha outro médico ou confira as férias em Pendências.');
  return {date,slot,start,end,doctor,original,confirmed:true};
 }

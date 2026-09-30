@@ -335,7 +335,7 @@ export function mountProduction(storage, seed) {
   });
   tabela.append(corpo);
   const wrap = el('div', 'table-wrap'); wrap.append(tabela);
-  box.append(wrap, el('small', 'muted', 'Atenção: Cinderelas (12h/18h), extras e médicos que entram em horário diferente das 07h/19h aparecem com valores altos aqui, sem terem se atrasado. Há ainda direito a até 2h de repouso e ao transporte. Use como ponto de conversa, nunca como punição automática.'));
+  box.append(wrap, el('small', 'muted', 'Atenção: Cinderelas (11h/12h), extras e médicos que entram em horário diferente das 07h/19h aparecem com valores altos aqui, sem terem se atrasado. Há ainda direito a até 2h de repouso e ao transporte. Use como ponto de conversa, nunca como punição automática.'));
   return box;
  }
 

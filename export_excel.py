@@ -42,6 +42,17 @@ for _prefix, _uri in {
     etree.register_namespace(_prefix, _uri)
 MONTHS = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 WEEKDAYS = ['SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO', 'DOMINGO']
+# Espelha scheduling.js:bounds. Cinderelas: até 30/09/2026, 12h-18h e 18h-00h; a partir de 01/10/2026, 11h-17h e 12h-18h.
+CINDERELAS_NOVAS = '2026-10-01'
+
+
+def slot_bounds(slot, date_text=CINDERELAS_NOVAS):
+    novas = str(date_text) >= CINDERELAS_NOVAS
+    if slot == 14:
+        return (11, 17) if novas else (12, 18)
+    if slot == 15:
+        return (12, 18) if novas else (18, 24)
+    return (7, 19) if slot < 7 else (19, 31)
 
 def doctor_identity(name):
     """Espelha scheduling.js:doctorIdentity — usado pra comparar médicos sem acento/CRM/pontuação."""
@@ -304,31 +315,136 @@ def export(year, month, half, backup, template, output):
     return schedule
 
 
+def fortnight_of(date_text):
+    """(ano, mês, quinzena, primeiro dia, último dia) da quinzena que contém a data."""
+    day = dt.date.fromisoformat(date_text)
+    half = 1 if day.day <= 15 else 2
+    start = 1 if half == 1 else 16
+    end = 15 if half == 1 else calendar.monthrange(day.year, day.month)[1]
+    return day.year, day.month, half, dt.date(day.year, day.month, start), dt.date(day.year, day.month, end)
+
+
+def hours_label(slot, date_text):
+    start, end = slot_bounds(slot, date_text)
+    return f'{start}h às {end % 24:02d}h' if end % 24 == 0 else f'{start}h às {end}h'
+
+
+def _add_style(styles, base, fill_rgb=None, font_rgb=None, bold=False):
+    """Cópia do estilo base com outro preenchimento/cor de fonte (usado na faixa com o número do dia)."""
+    fonts, fills, xfs = styles.find(Q('fonts')), styles.find(Q('fills')), styles.find(Q('cellXfs'))
+    xf = deepcopy(xfs[base])
+    if fill_rgb:
+        fill = etree.SubElement(fills, Q('fill'))
+        pattern = etree.SubElement(fill, Q('patternFill'), patternType='solid')
+        etree.SubElement(pattern, Q('fgColor'), rgb=fill_rgb)
+        etree.SubElement(pattern, Q('bgColor'), indexed='64')
+        fills.set('count', str(len(fills)))
+        xf.set('fillId', str(len(fills) - 1)); xf.set('applyFill', '1')
+    if font_rgb or bold:
+        font = deepcopy(fonts[int(xf.get('fontId', '0'))])
+        for tag in ('color', 'b') if font_rgb else ('b',):
+            old = font.find(Q(tag))
+            if old is not None:
+                font.remove(old)
+        if bold:
+            font.insert(0, etree.Element(Q('b')))
+        if font_rgb:
+            etree.SubElement(font, Q('color'), rgb=font_rgb)
+        fonts.append(font); fonts.set('count', str(len(fonts)))
+        xf.set('fontId', str(len(fonts) - 1)); xf.set('applyFont', '1')
+    xfs.append(xf); xfs.set('count', str(len(xfs)))
+    return len(xfs) - 1
+
+
 def export_cinderela(date_text, backup, output):
-    day=dt.date.fromisoformat(date_text)
-    monday=day-dt.timedelta(days=day.weekday())
-    template=ROOT/'templates'/'escala-cinderelas.xlsx'
+    """Escala de cinderelas QUINZENAL (modelo seguido pela UPA Norte), com o cabeçalho da UPA Sul.
+
+    Blocos semanais de segunda a domingo: PERÍODO/CAR. HOR. + dias da semana, faixa com o número do dia e as
+    duas cinderelas; no fim, as visitas (semanais) e o aviso de trocas. Quinzena = a que contém date_text.
+    Os médicos seguem o padrão semanal fixo das cinderelas, com edições do dia e coberturas confirmadas."""
+    year, month, half, first, last = fortnight_of(date_text)
+    template = ROOT / 'templates' / 'escala-cinderelas.xlsx'
+    visits = backup.get('visits:weekly', {})
+    seed_visits = {(item['weekday'], item['line']): item['doctor'] for item in SEED['visits']}
     with ZipFile(template) as original:
-        tree=etree.fromstring(original.read('xl/worksheets/sheet1.xml'))
+        tree = etree.fromstring(original.read('xl/worksheets/sheet1.xml'))
         _restore_ignorable_namespaces(tree, SHEET_EXTRA_NS)
-        sheet_data=tree.find(Q('sheetData'))
-        styles=etree.fromstring(original.read('xl/styles.xml'));_restore_ignorable_namespaces(styles, STYLES_EXTRA_NS);apply_color=color_writer(styles,sheet_data)
-        set_cell(sheet_data,'A2',f'CINDERELAS: {monday:%d/%m/%Y} a {monday+dt.timedelta(days=6):%d/%m/%Y}')
-        for i,col in enumerate('CDEFGHI'):
-            day=monday+dt.timedelta(days=i);date=day.isoformat();weekday=(day.weekday()+1)%7
-            set_cell(sheet_data,f'{col}3',f'{WEEKDAYS[i]}\n{day:%d/%m}')
-            edits=backup.get(f'edits:{day.year}:{day.month}:{1 if day.day<=15 else 2}',{})
-            for slot,row in [(14,4),(15,5)]:
-                rule=next((x for x in backup.get('fixed',[]) if x['weekday']==weekday and x['slot']==slot),None)
-                seed=next((x for x in SEED.get('cinderelas',[]) if x['weekday']==weekday and x['slot']==slot),{})
-                doctor=edits.get(f'{date}|{slot}',planned_doctor(date,slot,backup))
-                cover=next((x for x in backup.get('coverages',[]) if x.get('confirmed') and x['date']==date and x['slot']==slot),None)
-                if cover:doctor=cover['doctor']
-                value=doctor or ('X' if weekday in (0,6) else 'VAGO')
-                set_cell(sheet_data,f'{col}{row}',value);apply_color(f'{col}{row}',value)
-        replacement=serialize_xml(tree)
-        with ZipFile(output,'w') as target:
-            for member in original.infolist():target.writestr(member,replacement if member.filename=='xl/worksheets/sheet1.xml' else serialize_xml(styles) if member.filename=='xl/styles.xml' else original.read(member.filename))
+        sheet_data = tree.find(Q('sheetData'))
+        styles = etree.fromstring(original.read('xl/styles.xml')); _restore_ignorable_namespaces(styles, STYLES_EXTRA_NS)
+        # Protótipos do modelo: 1-2 cabeçalho, 3 títulos da semana, 4-5 linhas de médico, 6 aviso de trocas.
+        rows = {int(r.get('r')): r for r in sheet_data.findall(Q('row'))}
+        style = {r: {re.match(r'[A-Z]+', c.get('r')).group(): c.get('s') for c in rows[r].findall(Q('c'))} for r in (3, 4, 5, 6)}
+        heights = {r: rows[r].get('ht') for r in (3, 4, 6)}
+        for r in list(sheet_data.findall(Q('row'))):
+            if int(r.get('r')) >= 3:
+                sheet_data.remove(r)
+        day_style = _add_style(styles, int(style[3]['C']), fill_rgb='FF0070C0', font_rgb='FFFFFFFF', bold=True)
+        cols = 'ABCDEFGHI'
+
+        def new_row(number, height, styles_by_col, values=None):
+            row = etree.SubElement(sheet_data, Q('row'), r=str(number), spans='1:9', ht=str(height), customHeight='1')
+            for col in cols:
+                etree.SubElement(row, Q('c'), r=f'{col}{number}', s=str(styles_by_col(col)))
+            for col, value in (values or {}).items():
+                set_cell(sheet_data, f'{col}{number}', value)
+            return row
+
+        set_cell(sheet_data, 'A2', f'COMPETÊNCIA: {first.day} a {last.day} de {MONTHS[month]} de {year}')
+        # Semanas (segunda a domingo) que a quinzena toca.
+        weeks, monday = [], first - dt.timedelta(days=first.weekday())
+        while monday <= last:
+            weeks.append(monday); monday += dt.timedelta(days=7)
+        colored = []
+        number = 3
+        for monday in weeks:
+            new_row(number, heights[3], lambda c: style[3][c], {'A': 'PERÍODO', 'B': 'CAR. HOR.', **{col: WEEKDAYS[i] for i, col in enumerate('CDEFGHI')}})
+            days = {col: monday + dt.timedelta(days=i) for i, col in enumerate('CDEFGHI')}
+            new_row(number + 1, heights[3], lambda c: day_style, {col: d.day for col, d in days.items() if first <= d <= last})
+            for offset, slot in ((2, 14), (3, 15)):
+                label_date = max(first, monday).isoformat()
+                values = {'A': 'CINDERELA', 'B': hours_label(slot, label_date)}
+                for col, day in days.items():
+                    if not first <= day <= last:
+                        continue
+                    date = day.isoformat(); weekday = (day.weekday() + 1) % 7
+                    edits = backup.get(f'edits:{year}:{month}:{half}', {})
+                    doctor = edits.get(f'{date}|{slot}', planned_doctor(date, slot, backup))
+                    cover = next((x for x in backup.get('coverages', []) if x.get('confirmed') and x['date'] == date and x['slot'] == slot), None)
+                    if cover:
+                        doctor = cover['doctor']
+                    values[col] = doctor or ('X' if weekday in (0, 6) else 'VAGO')
+                    colored.append((f'{col}{number + offset}', values[col]))
+                new_row(number + offset, heights[4], lambda c: style[4][c], values)
+            number += 4
+        # Visitas: duas linhas semanais, como na escala de 12 horas.
+        visit_row = number
+        new_row(visit_row, heights[3], lambda c: style[3]['A'], {'A': 'VISITA'})
+        new_row(visit_row + 1, heights[3], lambda c: style[3][c], {'A': 'PERÍODO', 'B': 'CAR. HOR.', **{col: WEEKDAYS[i] for i, col in enumerate('CDEFGHI')}})
+        for line in range(2):
+            values = {'A': 'VISITA DIURNO', 'B': '6h'}
+            for i, col in enumerate('CDEFGHI'):
+                weekday = (i + 1) % 7
+                values[col] = visits.get(f'{weekday}|{line}', seed_visits.get((weekday, line), '')) or 'VAGO'
+                colored.append((f'{col}{visit_row + 2 + line}', values[col]))
+            new_row(visit_row + 2 + line, heights[4], lambda c: style[4][c], values)
+        foot = visit_row + 4
+        footer = new_row(foot, heights[6], lambda c: style[6][c], {'A': '*ESCALA SUJEITA À ALTERAÇÕES NO DECORRER DO MÊS EM RAZÃO DA POSSIBILIDADE DE TROCAS DE PLANTÕES ENTRE OS MÉDICOS DO CORPO CLÍNICO.'})
+        footer.set('thickBot', '1')
+        apply_color = color_writer(styles, sheet_data)
+        for address, value in colored:
+            apply_color(address, value)
+        tree.find(Q('dimension')).set('ref', f'A1:I{foot}')
+        merges = tree.find(Q('mergeCells'))
+        for m in list(merges):
+            merges.remove(m)
+        for ref in ('A1:C1', 'D1:F1', 'G1:I1', 'A2:C2', 'D2:I2', f'A{visit_row}:I{visit_row}', f'A{foot}:I{foot}'):
+            etree.SubElement(merges, Q('mergeCell'), ref=ref)
+        merges.set('count', str(len(merges)))
+        replacement = serialize_xml(tree)
+        with ZipFile(output, 'w') as target:
+            for member in original.infolist():
+                target.writestr(member, replacement if member.filename == 'xl/worksheets/sheet1.xml' else serialize_xml(styles) if member.filename == 'xl/styles.xml' else original.read(member.filename))
+    return {'ano': year, 'mes': month, 'quinzena': half, 'semanas': len(weeks)}
 
 
 if __name__ == '__main__':

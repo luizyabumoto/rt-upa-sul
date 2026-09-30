@@ -26,7 +26,7 @@ const seed = await seedResponse.json();
 // Nomes, CRMs e vínculos salvos antes do cadastro único passam para a forma padronizada.
 canonicalizeStorage(storage);
 const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const slotNames=['Diurno · Clínico 1','Diurno · Clínico 2','Diurno · Clínico 3','Diurno · Clínico 4','Diurno · Pediatria 1','Diurno · Pediatria 2','Diurno · Box','Noturno · Clínico 1','Noturno · Clínico 2','Noturno · Clínico 3','Noturno · Clínico 4','Noturno · Pediatria 1','Noturno · Pediatria 2','Noturno · Box','Cinderela · 12h–18h','Cinderela · 18h–00h'];
+const slotNames=['Diurno · Clínico 1','Diurno · Clínico 2','Diurno · Clínico 3','Diurno · Clínico 4','Diurno · Pediatria 1','Diurno · Pediatria 2','Diurno · Box','Noturno · Clínico 1','Noturno · Clínico 2','Noturno · Clínico 3','Noturno · Clínico 4','Noturno · Pediatria 1','Noturno · Pediatria 2','Noturno · Box','Cinderela · 11h–17h','Cinderela · 12h–18h'];
 const source=new Map(seed.assignments.map(a=>[`${a.date}|${a.slot}`,a.doctor]));
 const get=(key,fallback)=>{try{return JSON.parse(storage.getItem(`rt-upa:${key}`))??fallback}catch{return fallback}};
 const put=(key,value)=>storage.setItem(`rt-upa:${key}`,JSON.stringify(value));

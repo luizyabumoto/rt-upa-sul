@@ -19,6 +19,6 @@ test('rascunho não altera escala; duas confirmações independentes e desfazer 
  assert.equal(segments(seed,store,a.date,0)[0].doctor,'Ana');assert.equal(segments(seed,store,a.date,1)[0].doctor,'Luiza');a.confirmed=true;store.setItem('rt-upa:coverages',JSON.stringify([a,b]));assert.equal(segments(seed,store,a.date,0)[0].doctor,'Tiago');assert.equal(baseDoctor(seed,store,a.date,0),'Ana');a.confirmed=false;store.setItem('rt-upa:coverages',JSON.stringify([a,b]));assert.equal(segments(seed,store,a.date,0)[0].doctor,'Ana');
 });
 test('horários de 12h e 6h, cinderela fixo e bloqueio de sobreposição',()=>{
- assert.deepEqual(bounds(0),[7,19]);assert.deepEqual(bounds(7),[19,31]);assert.deepEqual(bounds(14),[12,18]);assert.deepEqual(bounds(15),[18,24]);assert.equal(baseDoctor(seed,new MemoryStore(),'2026-09-28',14),'Lucas');
+ assert.deepEqual(bounds(0),[7,19]);assert.deepEqual(bounds(7),[19,31]);assert.deepEqual(bounds(14,'2026-09-30'),[12,18]);assert.deepEqual(bounds(15,'2026-09-30'),[18,24]);assert.deepEqual(bounds(14,'2026-10-01'),[11,17]);assert.deepEqual(bounds(15,'2026-10-01'),[12,18]);assert.deepEqual(bounds(15),[12,18]);assert.equal(baseDoctor(seed,new MemoryStore(),'2026-09-28',14),'Lucas');
  const cover={id:'a',date:'2026-10-01',slot:0,start:7,end:19,doctor:'Tiago',confirmed:true};assert.throws(()=>validateCoverage({...cover,id:'b'},[cover]));validateCoverage({...cover,id:'b',slot:1},[cover]);
 });

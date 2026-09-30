@@ -1,7 +1,7 @@
 // Trocas detectadas pela produção: quem está na escala sem nenhuma consulta e quem está atendendo sem estar
 // na escala, no mesmo plantão e na mesma área. Quando não há dúvida (um sai, um entra), a escala do dia é
 // ajustada sozinha e o Painel avisa, com "Manter" e "Desfazer". Com dúvida, só avisa.
-import {parse, periodKey, baseDoctor, segments, doctorChoices, affiliation, MISSING_CRM} from './scheduling.js';
+import {parse, periodKey, baseDoctor, segments, doctorChoices, affiliation, MISSING_CRM, bounds} from './scheduling.js';
 import {plantaoAtual, mesmoMedico} from './production.js';
 import {registrarTroca} from './historico.js';
 
@@ -10,7 +10,9 @@ export const MINIMO_SUGESTAO = 3;           // abaixo disso nem sugere (pode ser
 export const HORAS_ANTES_DE_TROCAR = 2;     // no plantão em andamento, esperar o plantão "engrenar"
 const AREAS = {D: {adulto: [0, 1, 2, 3], pediatria: [4, 5]}, N: {adulto: [7, 8, 9, 10], pediatria: [11, 12]}};
 // Box e Cinderelas também atendem nos consultórios: quem está neles não é "de fora".
-const OUTROS_POSTOS = {D: [6, 14, 15], N: [13, 15]};
+// A cinderela conta no plantão com que o horário dela se cruza (depende da data: o horário mudou em 01/10/2026).
+const BOX = {D: 6, N: 13}, TURNO_HORAS = {D: [7, 19], N: [19, 31]};
+const postosExtras = (data, turno) => [BOX[turno], ...[14, 15].filter(slot => { const [a, b] = bounds(slot, data), [c, d] = TURNO_HORAS[turno]; return a < d && c < b; })];
 const HORA = 3600000;
 const nomeDe = doctor => String(doctor || '').split('\n')[0].trim();
 const idTroca = (plantao, t) => `${plantao.data}${plantao.turno}|${t.slot}|${nomeDe(t.saiu)}|${t.entrou}`;
@@ -51,7 +53,7 @@ export function postosDoPlantao(seed, storage, data, turno) {
 // Médicos do plantão que não entram como posto de consultório: Box, Cinderelas e quem está em cobertura.
 export function outrosDoPlantao(seed, storage, data, turno) {
  const nomes = [];
- for (const slot of OUTROS_POSTOS[turno]) for (const s of segments(seed, storage, data, slot)) if (s.doctor) nomes.push(s.doctor);
+ for (const slot of postosExtras(data, turno)) for (const s of segments(seed, storage, data, slot)) if (s.doctor) nomes.push(s.doctor);
  for (const slot of Object.values(AREAS[turno]).flat()) {
   const partes = segments(seed, storage, data, slot);
   if (partes.some(s => s.coverage)) for (const s of partes) if (s.doctor) nomes.push(s.doctor);

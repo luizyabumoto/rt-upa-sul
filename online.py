@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse, quote
 
-from export_excel import export, export_cinderela, DEFAULT_TEMPLATE
+from export_excel import export, export_cinderela, slot_bounds, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
@@ -92,7 +92,7 @@ def validate_items(items):
                 slot=item['slot']
                 if type(slot) is not int or not 0<=slot<=15 or type(item['confirmed']) is not bool:
                     raise ApiError(400,'Posto inválido.')
-                a,b=(12,18) if slot==14 else (18,24) if slot==15 else (7,19) if slot<7 else (19,31)
+                a,b=slot_bounds(slot,item['date'])
                 if item['start']!=a or item['end']!=b:
                     raise ApiError(400,'A cobertura deve corresponder ao horário completo do posto.')
             active=[x for x in parsed if x['confirmed']]
@@ -359,9 +359,13 @@ def app(environ, start_response):
             data=validate_items(payload.get('items'))
             with tempfile.TemporaryDirectory(prefix='rt-cinderela-') as temp:
                 target=Path(temp)/'cinderelas.xlsx'
-                export_cinderela(payload.get('date',''),data,target)
+                try:
+                    info=export_cinderela(payload.get('date',''),data,target)
+                except ValueError:
+                    raise ApiError(400,'Escolha uma data válida para exportar a quinzena.')
                 body=target.read_bytes()
-            extra.append(('Content-Disposition','attachment; filename="ESCALA_CINDERELAS.xlsx"'))
+            name=f"ESCALA_CINDERELAS_{info['quinzena']}A_QUINZENA_{info['mes']:02d}_{info['ano']}_UPA_SUL.xlsx"
+            extra.append(('Content-Disposition',f'attachment; filename="{name}"'))
             return respond(200,body,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if path == '/api/export-pdf' and method == 'POST':
             from export_pdf import export_pdf

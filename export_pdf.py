@@ -8,16 +8,20 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib import colors
-from export_excel import planned_doctor, SEED
+from export_excel import planned_doctor, slot_bounds, SEED
 
 POSTS = ['Clínico 1','Clínico 2','Clínico 3','Clínico 4','Pediatria 1','Pediatria 2','Box']
 DAYS = ['SEG','TER','QUA','QUI','SEX','SÁB','DOM']
+
+def cinderela_label(slot, day):
+    a,b=slot_bounds(slot,day.isoformat())
+    return f'{a:02d}h-{b%24:02d}h'
 
 def assignments(date, slot, data):
     half = 1 if date.day <= 15 else 2
     key = f'{date.isoformat()}|{slot}'
     base = data.get(f'edits:{date.year}:{date.month}:{half}', {}).get(key, planned_doctor(date.isoformat(),slot,data))
-    start,end = (12,18) if slot==14 else (18,24) if slot==15 else (7,19) if slot<7 else (19,31)
+    start,end = slot_bounds(slot,date.isoformat())
     covers=sorted((c for c in data.get('coverages',[]) if c.get('confirmed') and c['date']==date.isoformat() and c['slot']==slot),key=lambda c:c['start'])
     result=[]; cursor=start
     for cover in covers:
@@ -61,10 +65,10 @@ def export_pdf(year,month,half,kind,layout,data):
         title='ESCALA MÉDICA - UPA SUL' if kind=='regular' else 'ESCALA CINDERELAS - UPA SUL'
         pdf.setFont('Helvetica-Bold',13);pdf.drawString(margin,height-27,title)
         pdf.setFont('Helvetica',9);pdf.drawString(margin,height-43,f'{group[0]:%d/%m/%Y} a {group[-1]:%d/%m/%Y} | Pascoal Ramos')
-        pdf.setFont('Helvetica',7);pdf.drawString(margin,height-56,'Diurno: 07h-19h | Noturno: 19h-07h do dia seguinte | 12 horas' if kind=='regular' else 'Cinderela 1: 12h-18h | Cinderela 2: 18h-00h | 6 horas')
+        pdf.setFont('Helvetica',7);pdf.drawString(margin,height-56,'Diurno: 07h-19h | Noturno: 19h-07h do dia seguinte | 12 horas' if kind=='regular' else f'Cinderela 1: {cinderela_label(14,group[0])} | Cinderela 2: {cinderela_label(15,group[0])} | 6 horas')
         # Compact: days down the page. Weekly: seven wide columns with larger type.
         weekly=layout=='weekly'
-        def label(slot):return f'{"DIURNO" if slot<7 else "NOTURNO"}<br/>{POSTS[slot%7]}' if slot<14 else ('12h-18h' if slot==14 else '18h-00h')
+        def label(slot):return f'{"DIURNO" if slot<7 else "NOTURNO"}<br/>{POSTS[slot%7]}' if slot<14 else cinderela_label(slot,group[0])
         raw=([['Posto / horário']+[f'{d:%d/%m}<br/>{DAYS[d.weekday()]}' for d in group]]+[[label(s)]+[doctor_text(d,s,data) for d in group] for s in slots]) if weekly else ([['Data']+[label(s) for s in slots]]+[[f'{d:%d/%m}<br/>{DAYS[d.weekday()]}']+[doctor_text(d,s,data) for s in slots] for d in group])
         widths=([76]+[(available-76)/len(group)]*len(group)) if weekly else ([37]+[(available-37)/len(slots)]*len(slots))
         size=8.5 if weekly or kind=='cinderela' else 6.0
