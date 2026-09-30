@@ -1,7 +1,7 @@
 // Produção médica: consultas por médico a partir do relatório Produção Analítico do Gestor Saúde.
 // Retornos aparecem só como informação: dar baixa em retorno não significa ter atendido.
-import {segments, doctorIdentity, parse} from './scheduling.js';
-import {trocasDoPlantao, cartaoSugestao, HORAS_ANTES_DE_TROCAR} from './trocas.js';
+import {segments, doctorIdentity, parse, slots} from './scheduling.js';
+import {trocasDoPlantao, cartaoSugestao, aplicarSugestao, HORAS_ANTES_DE_TROCAR} from './trocas.js';
 
 export const CLASSES = [
  ['emergencia', 'Emergência', '#FF0000'], ['muitoUrgente', 'Muito urgente', '#FF8000'], ['urgente', 'Urgente', '#FFFF00'],
@@ -149,6 +149,48 @@ export function cruzamento(registros, escalas) {
  }
  return linhas.map(l => ({...l, mediaEscalado: l.escalados ? Math.round(l.consultasEscalado / l.escalados) : 0}))
   .sort((a, b) => b.escalados - a.escalados || b.consultasEscalado - a.consultasEscalado || a.medico.localeCompare(b.medico, 'pt-BR'));
+}
+
+// Possíveis faltas e trocas, plantão a plantão, a partir da escala e da produção. Cada linha é um posto de consultório:
+//  falta    → escalado sem nenhuma consulta e sem troca/cobertura registrada (com a sugestão de quem atendeu no lugar);
+//  producao → a produção detectou a troca (quem saiu não atendeu, quem entrou atendeu) e a escala já foi ajustada;
+//  vaga     → posto vago em que alguém de fora atendeu;
+//  cobertura / manual → escalado sem consultas, mas com cobertura confirmada ou troca registrada à mão (justificado).
+// Plantão em andamento só entra depois das 2 primeiras horas (o escalado pode estar chegando).
+const POSTOS_CONSULTORIO = {D: [0, 1, 2, 3, 4, 5], N: [7, 8, 9, 10, 11, 12]};
+export function faltasETrocas(seed, storage, registros, lista, agora = Date.now()) {
+ const trocasProd = parse(storage, 'trocas', []).filter(t => ['aplicada', 'mantida'].includes(t.status));
+ const manuais = parse(storage, 'historico', []).filter(h => h.origem === 'manual');
+ const coberturas = parse(storage, 'coverages', []).filter(c => c.confirmed);
+ const nome = d => String(d || '').split('\n')[0].trim();
+ const linhas = [];
+ for (const p of lista) {
+  const inicio = Date.parse(`${p.data}T${p.turno === 'D' ? '07' : '19'}:00:00-04:00`);
+  if (agora - inicio < HORAS_ANTES_DE_TROCAR * HORA) continue;
+  const doPlantao = registros.filter(r => r.data === p.data && r.turno === p.turno);
+  const consultasDe = medico => doPlantao.filter(r => mesmoMedico(r.medico, nome(medico))).reduce((s, r) => s + consultas(r), 0);
+  const sugestoes = (() => { try { const t = trocasDoPlantao(seed, storage, p, doPlantao); return [...t.automaticas, ...t.suspeitas.flatMap(s => s.pares)]; } catch { return []; } })();
+  const base = {data: p.data, turno: p.turno};
+  for (const slot of POSTOS_CONSULTORIO[p.turno]) {
+   const troca = trocasProd.find(t => t.data === p.data && t.turno === p.turno && t.slot === slot);
+   if (troca) { linhas.push({...base, slot, tipo: troca.saiu ? 'producao' : 'vaga', escalado: nome(troca.saiu), substituto: nome(troca.entrou), consultasSubstituto: consultasDe(troca.entrou)}); continue; }
+   for (const cob of coberturas.filter(c => c.date === p.data && c.slot === slot)) {
+    if (cob.original && !consultasDe(cob.original)) linhas.push({...base, slot, tipo: 'cobertura', escalado: nome(cob.original), substituto: nome(cob.doctor), consultasSubstituto: consultasDe(cob.doctor)});
+   }
+   const manual = [...manuais].reverse().find(h => h.data === p.data && h.slot === slot && h.saiu);
+   if (manual && !consultasDe(manual.saiu)) linhas.push({...base, slot, tipo: 'manual', escalado: nome(manual.saiu), substituto: nome(manual.entrou), consultasSubstituto: consultasDe(manual.entrou)});
+   const partes = segments(seed, storage, p.data, slot);
+   const vagaSugerida = sugestoes.find(t => t.slot === slot && !t.saiu);
+   if (partes.every(s => !s.doctor) && vagaSugerida) linhas.push({...base, slot, tipo: 'vaga', escalado: '', substituto: nome(vagaSugerida.entrou), consultasSubstituto: vagaSugerida.consultas, sugestao: vagaSugerida});
+   for (const parte of partes) {
+    if (!parte.doctor || consultasDe(parte.doctor)) continue;
+    if (linhas.some(l => l.data === p.data && l.turno === p.turno && l.slot === slot && mesmoMedico(l.escalado, nome(parte.doctor)))) continue;
+    const sugestao = sugestoes.find(t => t.slot === slot);
+    linhas.push({...base, slot, tipo: 'falta', escalado: nome(parte.doctor), substituto: sugestao ? nome(sugestao.entrou) : '', consultasSubstituto: sugestao?.consultas || 0, sugestao: sugestao || null});
+   }
+  }
+ }
+ return linhas.sort((a, b) => b.data.localeCompare(a.data) || b.turno.localeCompare(a.turno) || a.slot - b.slot);
 }
 
 // Duração real de cada plantão para "por hora": diurno 12 h, noturno 12 h.
@@ -384,36 +426,50 @@ export function mountProduction(storage, seed) {
   return box;
  }
 
- // Possíveis faltas: escalado no plantão, sem nenhuma consulta e sem troca/cobertura registrada.
+ // Possíveis faltas e trocas do período, posto a posto (ver faltasETrocas).
  function tabelaFaltas() {
-  const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
-  const linhas = cruzamento(filtra(dados.registros), escalas).filter(casaMedico);
-  const hist = [...parse(storage, 'historico', []), ...parse(storage, 'trocas', [])];
-  const cobre = parse(storage, 'coverages', []).filter(c => c.confirmed);
-  const justificado = (medico, data) => hist.some(h => h.data === data && mesmoMedico(h.saiu || '', medico)) || cobre.some(c => c.date === data && mesmoMedico(c.original || '', medico));
-  const faltosos = linhas.map(l => {
-   const faltas = l.semConsulta.filter(p => !justificado(l.medico, p.data));
-   return {medico: l.medico, escalados: l.escalados, faltas, justificadas: l.semConsulta.length - faltas.length};
-  }).filter(x => x.faltas.length).sort((a, b) => b.faltas.length - a.faltas.length);
+  const lista = plantoesDoPeriodo(dados.inicio, dados.fim).filter(p => !turnoAtual || p.turno === turnoAtual);
+  const linhas = faltasETrocas(seed, storage, dados.registros || [], lista).filter(l => !buscaAtual || semAcento(l.escalado).includes(buscaAtual) || semAcento(l.substituto).includes(buscaAtual));
+  const conta = tipo => linhas.filter(l => tipo.includes(l.tipo)).length;
   const box = el('section', 'prod-section');
-  box.append(el('h3', '', 'Possíveis faltas'), el('p', 'chart-sub', 'Médicos escalados num plantão que não registraram nenhuma consulta e não têm troca nem cobertura registrada para aquele dia. Confira caso a caso antes de qualquer cobrança.'));
-  if (!faltosos.length) { box.append(el('p', 'notice', 'Nenhuma falta sem justificativa no período — todos os escalados atenderam ou tiveram troca/cobertura registrada.')); return box; }
+  box.append(el('h3', '', 'Possíveis faltas e trocas'), el('p', 'chart-sub', 'Posto a posto: quem estava na escala e não registrou nenhuma consulta, as trocas que a produção detectou e os postos vagos em que alguém atendeu. Confira caso a caso antes de qualquer cobrança.'));
+  if (!linhas.length) { box.append(el('p', 'notice', 'Nenhuma falta ou troca no período: todos os escalados dos consultórios registraram consultas.')); return box; }
+  const resumo = el('div', 'faltas-resumo');
+  for (const [rotulo, tipos, cls] of [['possíveis faltas', ['falta'], 'falta'], ['trocas detectadas pela produção', ['producao'], 'producao'], ['vagas preenchidas', ['vaga'], 'vaga'], ['justificadas (cobertura ou troca registrada)', ['cobertura', 'manual'], 'justificada']]) {
+   const n = conta(tipos); if (n) resumo.append(el('span', `faltas-chip ${cls}`, `${n} ${rotulo}`));
+  }
+  box.append(resumo);
+  const SITUACAO = {falta: 'Possível falta', producao: 'Troca detectada pela produção', vaga: 'Posto vago preenchido', cobertura: 'Cobertura confirmada', manual: 'Troca registrada na escala'};
   const tabela = el('table', 'prod-table'), head = el('tr');
-  for (const [t, cls] of [['Médico'], ['Plantões na escala', 'num'], ['Possíveis faltas', 'num'], ['Datas'], ['Trocas/coberturas', 'num']]) head.append(el('th', cls || '', t));
+  for (const t of ['Plantão', 'Posto', 'Escalado (sem consultas)', 'Situação', 'Quem atendeu no lugar']) head.append(el('th', '', t));
   const thead = el('thead'); thead.append(head); tabela.append(thead);
   const corpo = el('tbody');
-  for (const f of faltosos) {
-   const tr = el('tr'), nome = el('td'); nome.append(botaoMedico(f.medico));
-   const datas = f.faltas.map(p => `${dataBR(p.data).slice(0, 5)} ${p.turno === 'D' ? 'D' : 'N'}`).join(', ');
-   tr.append(nome, el('td', 'num', String(f.escalados)), el('td', 'num strong alerta', String(f.faltas.length)), el('td', '', datas), el('td', 'num muted', String(f.justificadas)));
+  for (const l of linhas) {
+   const tr = el('tr', `falta-${l.tipo}`), escalado = el('td'), no = el('td');
+   if (l.escalado) escalado.append(botaoMedico(l.escalado)); else escalado.append(el('span', 'muted', 'Posto vago'));
+   if (l.substituto) no.append(botaoMedico(l.substituto), el('small', 'muted', ` ${l.consultasSubstituto} consultas${l.tipo === 'falta' ? ' · atendeu fora da escala' : ''}`));
+   else if (l.tipo === 'falta') no.append(el('span', 'muted', 'Ninguém de fora atendeu no lugar'));
+   if (l.sugestao) {
+    const botao = el('button', 'secondary', 'Registrar troca');
+    botao.type = 'button'; botao.title = `Colocar ${l.substituto} no posto e registrar a troca (dá para desfazer no Painel)`;
+    botao.onclick = () => { aplicarSugestao(seed, storage, {data: l.data, turno: l.turno}, [l.sugestao]); document.dispatchEvent(new Event('rt-schedule-changed')); render(); };
+    no.append(document.createTextNode(' '), botao);
+   }
+   tr.append(el('td', '', `${dataBR(l.data).slice(0, 5)} ${l.turno === 'D' ? 'diurno' : 'noturno'}`), el('td', '', slots[l.slot].split(' · ')[1]), escalado,
+    el('td', l.tipo === 'falta' ? 'strong alerta' : l.tipo === 'producao' || l.tipo === 'vaga' ? 'strong' : 'muted', SITUACAO[l.tipo]), no);
    corpo.append(tr);
   }
   tabela.append(corpo);
   const wrap = el('div', 'table-wrap'); wrap.append(tabela);
-  box.append(wrap, el('small', 'muted', 'D = diurno · N = noturno. "Trocas/coberturas" são os plantões sem consulta que já têm justificativa registrada (não contam como falta). Pode haver plantão no Box (fora dos consultórios) que não aparece aqui.'));
+  // Quem mais aparece como possível falta no período.
+  const porMedico = new Map();
+  for (const l of linhas.filter(x => x.tipo === 'falta' || x.tipo === 'producao')) porMedico.set(l.escalado, (porMedico.get(l.escalado) || 0) + 1);
+  const repetidos = [...porMedico].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]);
+  box.append(wrap);
+  if (repetidos.length) box.append(el('p', 'notice', `Mais de uma vez no período: ${repetidos.map(([m, n]) => `${m} (${n})`).join(', ')}.`));
+  box.append(el('small', 'muted', '"Troca detectada pela produção": quem estava na escala não atendeu e outro médico atendeu no lugar; a escala do dia já foi ajustada (desfaça no Painel se estiver errado). "Registrar troca" aplica a sugestão na escala. Plantão em andamento só aparece depois das 2 primeiras horas. Box fica fora (não registra consultas de consultório).'));
   return box;
  }
-
  function cartaoEscala() {
   const box = $('.prod-escala'); box.replaceChildren();
   const chave = $('.prod-period').value;

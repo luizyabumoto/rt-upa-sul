@@ -360,12 +360,11 @@ def export_cinderela(date_text, backup, output):
     """Escala de cinderelas QUINZENAL (modelo seguido pela UPA Norte), com o cabeçalho da UPA Sul.
 
     Blocos semanais de segunda a domingo: PERÍODO/CAR. HOR. + dias da semana, faixa com o número do dia e as
-    duas cinderelas; no fim, as visitas (semanais) e o aviso de trocas. Quinzena = a que contém date_text.
+    duas cinderelas; no fim, o aviso de trocas. Quinzena = a que contém date_text. Visitas ficam só na escala de
+    12 horas. A carga horária é sempre a atual (11h às 17h e 12h às 18h), mesmo exportando uma quinzena anterior.
     Os médicos seguem o padrão semanal fixo das cinderelas, com edições do dia e coberturas confirmadas."""
     year, month, half, first, last = fortnight_of(date_text)
     template = ROOT / 'templates' / 'escala-cinderelas.xlsx'
-    visits = backup.get('visits:weekly', {})
-    seed_visits = {(item['weekday'], item['line']): item['doctor'] for item in SEED['visits']}
     with ZipFile(template) as original:
         tree = etree.fromstring(original.read('xl/worksheets/sheet1.xml'))
         _restore_ignorable_namespaces(tree, SHEET_EXTRA_NS)
@@ -401,8 +400,7 @@ def export_cinderela(date_text, backup, output):
             days = {col: monday + dt.timedelta(days=i) for i, col in enumerate('CDEFGHI')}
             new_row(number + 1, heights[3], lambda c: day_style, {col: d.day for col, d in days.items() if first <= d <= last})
             for offset, slot in ((2, 14), (3, 15)):
-                label_date = max(first, monday).isoformat()
-                values = {'A': 'CINDERELA', 'B': hours_label(slot, label_date)}
+                values = {'A': 'CINDERELA', 'B': hours_label(slot, CINDERELAS_NOVAS)}
                 for col, day in days.items():
                     if not first <= day <= last:
                         continue
@@ -416,18 +414,7 @@ def export_cinderela(date_text, backup, output):
                     colored.append((f'{col}{number + offset}', values[col]))
                 new_row(number + offset, heights[4], lambda c: style[4][c], values)
             number += 4
-        # Visitas: duas linhas semanais, como na escala de 12 horas.
-        visit_row = number
-        new_row(visit_row, heights[3], lambda c: style[3]['A'], {'A': 'VISITA'})
-        new_row(visit_row + 1, heights[3], lambda c: style[3][c], {'A': 'PERÍODO', 'B': 'CAR. HOR.', **{col: WEEKDAYS[i] for i, col in enumerate('CDEFGHI')}})
-        for line in range(2):
-            values = {'A': 'VISITA DIURNO', 'B': '6h'}
-            for i, col in enumerate('CDEFGHI'):
-                weekday = (i + 1) % 7
-                values[col] = visits.get(f'{weekday}|{line}', seed_visits.get((weekday, line), '')) or 'VAGO'
-                colored.append((f'{col}{visit_row + 2 + line}', values[col]))
-            new_row(visit_row + 2 + line, heights[4], lambda c: style[4][c], values)
-        foot = visit_row + 4
+        foot = number
         footer = new_row(foot, heights[6], lambda c: style[6][c], {'A': '*ESCALA SUJEITA À ALTERAÇÕES NO DECORRER DO MÊS EM RAZÃO DA POSSIBILIDADE DE TROCAS DE PLANTÕES ENTRE OS MÉDICOS DO CORPO CLÍNICO.'})
         footer.set('thickBot', '1')
         apply_color = color_writer(styles, sheet_data)
@@ -437,7 +424,7 @@ def export_cinderela(date_text, backup, output):
         merges = tree.find(Q('mergeCells'))
         for m in list(merges):
             merges.remove(m)
-        for ref in ('A1:C1', 'D1:F1', 'G1:I1', 'A2:C2', 'D2:I2', f'A{visit_row}:I{visit_row}', f'A{foot}:I{foot}'):
+        for ref in ('A1:C1', 'D1:F1', 'G1:I1', 'A2:C2', 'D2:I2', f'A{foot}:I{foot}'):
             etree.SubElement(merges, Q('mergeCell'), ref=ref)
         merges.set('count', str(len(merges)))
         replacement = serialize_xml(tree)

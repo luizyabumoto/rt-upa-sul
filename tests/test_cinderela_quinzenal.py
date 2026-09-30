@@ -39,10 +39,18 @@ class CinderelaQuinzenalTests(unittest.TestCase):
         self.assertTrue(c['F5'] and c['F5'] != 'VAGO')           # padrão semanal fixo preenche o dia
         self.assertEqual([c['C12'], c['F12']], ['12', '15'])     # último bloco termina no dia 15
         self.assertEqual(c.get('G13', ''), '')                  # 16/10 já é da outra quinzena
-        self.assertEqual([c['A15'], c['A17']], ['VISITA', 'VISITA DIURNO'])
-        self.assertIn('ESCALA SUJEITA', c['A19'])
+        # Sem visitas (ficam na escala de 12 horas): o aviso de trocas vem logo depois do último bloco.
+        self.assertIn('ESCALA SUJEITA', c['A15'])
+        self.assertNotIn('VISITA', ' '.join(c.values()))
         merges = [m.get('ref') for m in arvore.find(Q('mergeCells'))]
-        self.assertIn('A19:I19', merges)
+        self.assertIn('A15:I15', merges)
+
+    def test_carga_horaria_atual_mesmo_em_quinzena_anterior(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            saida = Path(pasta) / 'c.xlsx'
+            export_cinderela('2026-09-29', {}, saida)
+            c, _ = celulas(saida)
+        self.assertEqual({c[k] for k in c if k.startswith('B') and 'às' in c[k]}, {'11h às 17h', '12h às 18h'})
 
     def test_quinzena_que_toca_quatro_semanas(self):
         # 16/08/2026 é domingo: 16 | 17-23 | 24-30 | 31.

@@ -182,3 +182,10 @@ button{min-height:38px}
 /* Espera por classificação (Fluxo de pacientes) */
 .espera{margin-top:34px;padding-top:24px;border-top:1px solid var(--rt-line)}
 .espera-tabela h3{margin:18px 0 8px;font-size:15px}
+/* Possíveis faltas e trocas (Produção médica) */
+.faltas-resumo{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.faltas-chip{padding:5px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--rt-line);color:#c9d6e0}
+.faltas-chip.falta{border-color:#d34c4c;color:#ff9b93;background:#2a1414}
+.faltas-chip.producao,.faltas-chip.vaga{border-color:#c97a2e;color:#ffd9ad;background:#231b12}
+.prod-table tr.falta-falta td:first-child{box-shadow:inset 3px 0 0 #d34c4c}
+.prod-table tr.falta-producao td:first-child,.prod-table tr.falta-vaga td:first-child{box-shadow:inset 3px 0 0 #c97a2e}
