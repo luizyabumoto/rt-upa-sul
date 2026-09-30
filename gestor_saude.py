@@ -283,6 +283,13 @@ class GestorSaude:
     def __init__(self, env=os.environ, abrir=urlopen, relogio=time.time):
         self.base = (env.get('GESTOR_SAUDE_URL') or 'https://gestorsaude.cuiaba.mt.gov.br/').rstrip('/') + '/'
         self.usuario, self.senha = env.get('GESTOR_SAUDE_USUARIO', ''), env.get('GESTOR_SAUDE_SENHA', '')
+        # Unidade FIXA: a UPA Sul (estabelecimento 80). Nunca usar o "padrão salvo" da conta, que muda quando
+        # o usuário entra em outra unidade (ex.: UPA Verdão) e faria o site ler a produção/fila da unidade errada.
+        # Valores confirmados na API em 30/09/2026 (a fila só responde com setor e departamento válidos da unidade).
+        self.estabelecimento_id = int(env.get('GESTOR_SAUDE_ESTABELECIMENTO_ID') or 80)
+        self.cbo_id = int(env.get('GESTOR_SAUDE_CBO_ID') or 455)
+        self.setor_id = int(env.get('GESTOR_SAUDE_SETOR_ID') or 1615)
+        self.departamento_id = int(env.get('GESTOR_SAUDE_DEPARTAMENTO_ID') or 452)
         self.abrir, self.relogio = abrir, relogio
         self.token, self.expira, self.tipos = None, 0, None
         self.campos_relatorio = []
@@ -318,18 +325,24 @@ class GestorSaude:
         return json.loads(base64.urlsafe_b64decode(parte + '=' * (-len(parte) % 4)))
 
     def _entrar(self):
-        """Mesmo caminho do navegador: login, configuração padrão salva e "Continuar"."""
+        """Login e "Continuar" fixando SEMPRE a UPA Sul, independentemente do padrão salvo na conta.
+        Depois confere no próprio token que a unidade aberta é mesmo a UPA Sul; se vier outra unidade,
+        cancela a leitura em vez de mostrar dados errados (foi o que aconteceu com a UPA Verdão)."""
         inicial = self._chamar('Api/Token', {'username': self.usuario, 'password': self.senha})['access_token']
         claims = self._claims(inicial)
-        padrao = self._chamar(f"api/Usuario/ConfigAtendimentoPadrao/{claims['usuarioId']}", token=inicial, metodo='GET') or {}
-        if not padrao.get('estabelecimentoId'):
-            raise GestorSaudeError('A conta do Gestor Saúde não tem estabelecimento padrão salvo.')
         contexto = {'usuarioId': int(claims['usuarioId']), 'sessaoId': int(claims['sessaoId']),
-                    **{k: padrao.get(k) for k in ('estabelecimentoId', 'cboId', 'setorId', 'departamentoId')},
+                    'estabelecimentoId': self.estabelecimento_id, 'cboId': self.cbo_id,
+                    'setorId': self.setor_id, 'departamentoId': self.departamento_id,
                     'localAtendimento': None, 'cbo': None, 'salvaPadrao': False}
-        self.token = self._chamar('Api/Token/AutorizaPermissaoUsuario', contexto, token=inicial)['access_token']
+        autorizado = self._chamar('Api/Token/AutorizaPermissaoUsuario', contexto, token=inicial)['access_token']
+        dados = self._claims(autorizado)
+        if str(dados.get('estabelecimentoId')) != str(self.estabelecimento_id):
+            raise GestorSaudeError(
+                f'Unidade incorreta: o Gestor Saúde abriu "{dados.get("estabelecimento") or dados.get("estabelecimentoId")}" '
+                f'em vez da UPA Sul (id {self.estabelecimento_id}). Leitura cancelada para não misturar dados de outra unidade.')
+        self.token = autorizado
         # Renova com folga de 5 minutos antes do vencimento do JWT.
-        self.expira = float(self._claims(self.token).get('exp', self.relogio() + 3600)) - 300
+        self.expira = float(dados.get('exp', self.relogio() + 3600)) - 300
 
     def _com_token(self, acao):
         """Executa com o token atual; se o Gestor Saúde recusar, entra de novo uma única vez."""

@@ -63,10 +63,8 @@ class FakeRelatorio:
         responder = lambda dado: FakeResponse(json.dumps(dado).encode())
         if caminho == 'Api/Token':
             return responder({'access_token': jwt({'usuarioId': '1', 'sessaoId': '1'})})
-        if caminho.startswith('api/Usuario/ConfigAtendimentoPadrao'):
-            return responder({'estabelecimentoId': 80, 'cboId': 455, 'setorId': 1, 'departamentoId': 1})
         if caminho == 'Api/Token/AutorizaPermissaoUsuario':
-            return responder({'access_token': jwt({'exp': 2_000_000_000})})
+            return responder({'access_token': jwt({'exp': 2_000_000_000, 'estabelecimentoId': 80, 'estabelecimento': 'UPA SUL'})})
         if caminho == 'api/AtendimentoTipo':
             return responder([{'atendimentoTipo': n, 'atendimentoTipoId': i} for i, n in enumerate(['CONSULTÓRIO ADULTO', 'CONSULTÓRIO PEDIÁTRICO', 'RETORNO ADULTO', 'RETORNO PEDIÁTRICO'], 1)])
         if caminho.startswith('api/Cbo/GetByAtendimentoTipoId/'):

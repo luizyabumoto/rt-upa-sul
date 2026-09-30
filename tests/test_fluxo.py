@@ -75,6 +75,8 @@ class FakeGestor:
     def __init__(self, fila, senha='certa'):
         self.fila, self.senha, self.chamadas = fila, senha, []
         self.token_valido = 'ctx-1'
+        self.estabelecimento_devolvido = 80   # unidade que o Gestor Saúde ABRE no token; 80 = UPA Sul
+        self.enviado_estabelecimento = None   # unidade que o site PEDIU (o que ele fixou)
 
     def __call__(self, pedido, timeout=None):
         caminho = pedido.full_url.split('.br/', 1)[1]
@@ -87,13 +89,14 @@ class FakeGestor:
             if corpo['password'] != self.senha:
                 raise erro(400)
             return FakeResponse(json.dumps({'access_token': jwt({'usuarioId': '3659', 'sessaoId': '1'})}).encode())
-        if caminho == 'api/Usuario/ConfigAtendimentoPadrao/3659':
-            return FakeResponse(json.dumps({'estabelecimentoId': 80, 'cboId': 455, 'setorId': 1615, 'departamentoId': 452}).encode())
         if caminho == 'Api/Token/AutorizaPermissaoUsuario':
-            assert corpo['estabelecimentoId'] == 80 and corpo['usuarioId'] == 3659
-            return FakeResponse(json.dumps({'access_token': jwt({'exp': 2_000_000_000}) if self.token_valido else 'x'}).encode())
+            # Fixa a UPA Sul (80) e devolve a unidade escolhida no próprio token, como a API real faz.
+            assert corpo['usuarioId'] == 3659
+            self.enviado_estabelecimento = corpo['estabelecimentoId']
+            claims = {'exp': 2_000_000_000, 'estabelecimentoId': self.estabelecimento_devolvido, 'estabelecimento': 'UPA SUL'}
+            return FakeResponse(json.dumps({'access_token': jwt(claims) if self.token_valido else 'x'}).encode())
         if caminho == 'api/PacienteAtendimento/Pagination/true':
-            if auth != 'Bearer ' + jwt({'exp': 2_000_000_000}):
+            if auth != 'Bearer ' + jwt({'exp': 2_000_000_000, 'estabelecimentoId': self.estabelecimento_devolvido, 'estabelecimento': 'UPA SUL'}):
                 raise erro(401)
             return FakeResponse(json.dumps({'items': self.fila, 'recordCount': len(self.fila)}).encode())
         raise AssertionError(caminho)
@@ -116,6 +119,31 @@ class ClienteTests(unittest.TestCase):
             GestorSaude({}, abrir=FakeGestor([])).fila()
         with self.assertRaisesRegex(GestorSaudeError, 'usuário ou a senha'):
             GestorSaude(self.env(GESTOR_SAUDE_SENHA='errada'), abrir=FakeGestor([])).fila()
+
+    def test_recusa_dados_de_outra_unidade(self):
+        # Se o Gestor Saúde abrir outra unidade (ex.: UPA Verdão) em vez da UPA Sul, não pode mostrar nada.
+        fake = FakeGestor([item('CONSULTÓRIO ADULTO')])
+        fake.estabelecimento_devolvido = 117            # 117 = UPA Verdão
+        cliente = GestorSaude(self.env(), abrir=fake, relogio=lambda: 1_900_000_000)
+        with self.assertRaisesRegex(GestorSaudeError, 'Unidade incorreta'):
+            cliente.fila()
+
+    def test_fixa_a_upa_sul_e_ignora_o_padrao_da_conta(self):
+        # O site sempre PEDE a UPA Sul (80), sem consultar o padrão salvo na conta.
+        fake = FakeGestor([item('CONSULTÓRIO ADULTO')])
+        cliente = GestorSaude(self.env(), abrir=fake, relogio=lambda: 1_900_000_000)
+        cliente.fila()
+        self.assertEqual(fake.enviado_estabelecimento, 80)
+        self.assertNotIn('api/Usuario/ConfigAtendimentoPadrao/3659', fake.chamadas)
+
+    def test_estabelecimento_vem_de_variavel_de_ambiente(self):
+        # A unidade pode ser trocada por variável de ambiente (mesma proteção vale para a nova unidade).
+        fake = FakeGestor([item('CONSULTÓRIO ADULTO')])
+        fake.estabelecimento_devolvido = 117
+        cliente = GestorSaude(self.env(GESTOR_SAUDE_ESTABELECIMENTO_ID='117', GESTOR_SAUDE_SETOR_ID='1638', GESTOR_SAUDE_DEPARTAMENTO_ID='491'),
+                              abrir=fake, relogio=lambda: 1_900_000_000)
+        self.assertEqual(len(cliente.fila()), 1)
+        self.assertEqual(fake.enviado_estabelecimento, 117)
 
 
 class PainelTests(unittest.TestCase):
