@@ -6,7 +6,9 @@ export const bounds=(slot,date=CINDERELAS_NOVAS)=>slot===14?(date>=CINDERELAS_NO
 export const hour=n=>`${String(n%24).padStart(2,'0')}:00${n>=24?' (+1 dia)':''}`;
 export const periodKey=date=>{const [y,m,d]=date.split('-').map(Number);return `edits:${y}:${m}:${d<=15?1:2}`;};
 export const parse=(storage,key,fallback)=>{try{return JSON.parse(storage.getItem('rt-upa:'+key))??fallback;}catch{return fallback;}};
-export const doctorIdentity=name=>String(name||'').split(/CRM/i)[0].normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+// Chamada milhares de vezes a cada atualização da tela, sempre com os mesmos nomes: o resultado fica guardado.
+const identityCache=new Map();
+export const doctorIdentity=name=>{const key=String(name||'');let id=identityCache.get(key);if(id===undefined){id=key.split(/CRM/i)[0].normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();if(identityCache.size>20000)identityCache.clear();identityCache.set(key,id);}return id;};
 export function vacationConflicts(storage,doctor,date,slot=0){
  if(!doctor)return [];
  const next=new Date(date+'T12:00:00');next.setDate(next.getDate()+1);
@@ -148,7 +150,12 @@ const NAME_FIXES={gustavoluizsilacampos:'GUSTAVO LUIZ SILVA CAMPOS',blayraborges
 const CRM_FIXES={josepedromachryvacari:{from:['17422',''],to:'17877'}};
 export const MISSING_CRM='A CONFIRMAR';
 const DOCTOR_TEXT=/^[^\n]+\nCRM\s*(\d+|A CONFIRMAR)?\s*-?\s*(EXTRA\s*SMS|COAPH|SMS)?\s*$/i;
+const canonicalCache=new Map();
 export function canonicalDoctor(doctor){
+ if(typeof doctor!=='string')return canonicalUncached(doctor);
+ let v=canonicalCache.get(doctor);if(v===undefined){v=canonicalUncached(doctor);if(canonicalCache.size>20000)canonicalCache.clear();canonicalCache.set(doctor,v);}return v;
+}
+function canonicalUncached(doctor){
  if(typeof doctor!=='string'||!DOCTOR_TEXT.test(doctor))return doctor;
  let name=doctor.split(/CRM/i)[0].replace(/\s+/g,' ').trim().toUpperCase();
  name=NAME_FIXES[doctorIdentity(name)]||name;
@@ -171,7 +178,14 @@ export function canonicalizeStorage(storage){
  return changed;
 }
 // Um item por médico, com o vínculo mais usado por ele como sugestão.
+// A lista de médicos só muda quando mudam o cadastro, os fixos ou os excluídos: fica guardada até lá.
+let choicesCache={chave:null,seed:null,lista:[]};
 export function doctorChoices(seed,storage){
+ const chave=['doctors','roster','excluidos'].map(k=>storage.getItem('rt-upa:'+k)||'').join('\u0001');
+ if(choicesCache.seed===seed&&choicesCache.chave===chave)return [...choicesCache.lista];
+ const lista=doctorChoicesUncached(seed,storage);choicesCache={chave,seed,lista};return [...lista];
+}
+function doctorChoicesUncached(seed,storage){
  const counts=new Map(),add=(doctor,weight)=>{if(!doctor||!DOCTOR_TEXT.test(doctor))return;const key=doctorIdentity(doctor);if(!counts.has(key))counts.set(key,new Map());const byText=counts.get(key);byText.set(doctor,(byText.get(doctor)||0)+weight);};
  for(const doctor of [...seed.physicians,...parse(storage,'doctors',[]),...parse(storage,'roster',[]).map(x=>x.doctor)])add(canonicalDoctor(doctor),0);
  for(const item of seed.assignments)add(item.doctor,1);

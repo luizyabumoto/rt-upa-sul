@@ -154,8 +154,8 @@ dialog{background:var(--surface)!important;color:var(--text)!important;border:1p
 dialog::backdrop{background:rgba(3,6,10,.72);backdrop-filter:blur(3px)}
 
 /* ---------- Médicos e fixos: colunas tipo "mural" (sem buracos entre cartões) ---------- */
-#roster-cards.day-cards{display:block!important;columns:5 250px;column-gap:14px}
-#roster-cards.day-cards>*{break-inside:avoid;margin:0 0 14px!important;display:block}
+#roster-cards.day-cards{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+#roster-cards.day-cards>*{margin:0!important}
 .roster-line{border-top:1px solid var(--line)!important}
 .roster-line.roster-upcoming{border-top:1px dashed var(--accent-line)!important}
 .roster-line.roster-upcoming p{color:var(--accent-text)!important}
@@ -200,7 +200,7 @@ dialog::backdrop{background:rgba(3,6,10,.72);backdrop-filter:blur(3px)}
  header{padding-top:12px!important;padding-bottom:12px!important}
  .workspace-nav{border-radius:12px!important;margin:12px 0 16px!important}
  .workspace-nav button{padding:8px 11px;font-size:12.5px}
- #roster-cards.day-cards{columns:1}
+ #roster-cards.day-cards{grid-template-columns:1fr}
  /* Quinzena no celular: mês com mais espaço que o ano ("Setembro" não corta) e setas mais discretas */
  .periodo-linha{grid-template-columns:36px 1.6fr 1fr 36px!important}
  .periodo-linha select,.periodo-linha input{font-size:14px!important;padding-left:10px;padding-right:22px}
@@ -279,3 +279,30 @@ label.excluir-item{display:flex!important;align-items:center;gap:8px;font-size:1
 .quadro-tabela tr.quadro-conta td{text-align:center;font-weight:750;font-size:12px;padding:6px!important}
 .quadro-tabela tr.quadro-conta .quadro-falta{color:var(--warn-text)}
 .quadro-tabela tr.quadro-conta .quadro-ok{color:var(--accent-text)}
+/* Médicos A–Z */
+.az-barra{grid-column:1/-1;position:sticky;top:64px;z-index:5;display:flex;flex-wrap:wrap;gap:4px;padding:8px;background:rgba(10,15,24,.92);border:1px solid var(--line);border-radius:var(--radius);backdrop-filter:blur(8px)}
+.az-barra button{min-height:30px;min-width:34px;padding:4px 8px;font-size:12.5px}
+.az-letra{grid-column:1/-1;margin:10px 0 -4px!important;padding-bottom:6px;border-bottom:1px solid var(--line);color:var(--accent-text)!important;font-size:15px;letter-spacing:.08em;scroll-margin-top:120px}
+.medico-card{padding:16px!important;display:grid;gap:10px}
+.medico-topo h3{margin:0 0 6px!important;font-size:15px!important;line-height:1.3}
+.medico-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.medico-meta .affiliation{margin:0!important}
+.medico-meta .roster-carga{margin:0!important}
+.medico-dias{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.medico-dia{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px}
+.medico-dia-futuro{border-style:dashed;border-color:var(--accent-line)}
+.medico-dia-saindo{border-color:var(--warn-line)}
+.medico-sigla{display:grid;place-items:center;height:30px;border-radius:8px;background:var(--surface-3);color:var(--text);font-weight:800;font-size:11.5px;letter-spacing:.06em}
+.medico-texto{display:grid;gap:1px;min-width:0}
+.medico-texto strong{font-size:13px;font-weight:650}
+.medico-texto small{font-size:11.5px;color:var(--text-3)}
+.medico-dia-futuro .medico-texto small{color:var(--accent-text)}
+.medico-dia-saindo .medico-texto small{color:var(--warn-text)}
+.medico-acoes{display:flex;gap:4px}
+.medico-acoes button{min-height:30px;padding:4px 9px;font-size:12px}
+.medico-rodape{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding-top:4px}
+.medico-rodape button{min-height:32px;padding:5px 12px;font-size:12.5px;width:auto!important;margin:0!important}
+.medico-rodape button.medico-sair{background:transparent!important;border-color:transparent!important;color:var(--danger-text)!important;opacity:.8}
+.medico-rodape button.medico-sair:hover{opacity:1;border-color:var(--danger-line)!important}
+.medico-texto strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#organizer #task-filter{width:auto!important;min-width:220px;max-width:320px}
