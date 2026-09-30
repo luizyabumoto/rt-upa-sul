@@ -50,7 +50,9 @@ export function mountAlertasEscala(storage, seed) {
  // Item: vagas abertas no Painel.
  const overview = document.querySelector('#overview-panel');
  const vagas = el('section', 'vagas-alerta'); vagas.hidden = true;
- if (overview) { const antes = overview.querySelector('.trocas-alerta') || overview.querySelector('.flow-summary'); if (antes) antes.after(vagas); else overview.prepend(vagas); }
+ const lugar = overview?.querySelector('[data-slot="alertas"]');
+ if (lugar) lugar.append(vagas);
+ else if (overview) { const antes = overview.querySelector('.trocas-alerta') || overview.querySelector('.flow-summary'); if (antes) antes.after(vagas); else overview.prepend(vagas); }
 
  function renderVagas() {
   const lista = vagasProximas(seed, storage, hojeCuiaba());

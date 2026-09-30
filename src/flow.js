@@ -49,14 +49,45 @@ function riskCard(c) {
  return card;
 }
 
+// Resumo grande do Painel: quantos aguardam médico, maior espera, áreas e a barra por classificação de risco.
+function resumoPainel(summary, d, estado) {
+ const estourados = d.classificacoes.filter(c => ALVO_MANCHESTER[c.chave] !== undefined && c.maiorEspera !== null && c.maiorEspera > ALVO_MANCHESTER[c.chave]);
+ const principal = el('div', 'fs-main'), numero = el('p', 'fs-numero');
+ numero.append(el('strong', 'fs-num', String(d.total.aguardando)), el('span', '', d.total.aguardando === 1 ? ' paciente aguardando médico' : ' pacientes aguardando médico'));
+ const stats = el('div', 'fs-stats');
+ const stat = (rotulo, valor, alerta) => { const b = el('div', `fs-stat${alerta ? ' alerta' : ''}`); b.append(el('span', '', rotulo), el('strong', '', valor)); return b; };
+ stats.append(stat('Maior espera', formatarEspera(d.total.maiorEspera), estourados.length > 0), stat('Espera média', formatarEspera(d.total.media)),
+  stat('Adulto', `${d.adulto.aguardando}`), stat('Pediatria', `${d.pediatria.aguardando}`), stat('Na triagem', `${d.triagem.aguardando}`));
+ principal.append(numero, stats);
+ const risco = el('div', 'fs-risco'), barra = el('div', 'fs-barra'), legenda = el('ul', 'fs-legenda');
+ barra.setAttribute('role', 'img');
+ barra.setAttribute('aria-label', 'Aguardando por classificação: ' + d.classificacoes.map(c => `${c.nome} ${c.aguardando}`).join(', '));
+ for (const c of d.classificacoes) {
+  if (!c.aguardando) continue;
+  const seg = el('span'); seg.style.flexGrow = c.aguardando; seg.style.background = TOM[c.chave] || c.cor; seg.title = `${c.nome}: ${c.aguardando}`;
+  barra.append(seg);
+  const item = el('li', estourados.includes(c) ? 'alerta' : ''), dot = el('span', 'flow-dot'); dot.style.setProperty('--risk', TOM[c.chave] || c.cor);
+  item.append(dot, el('span', '', c.nome), el('strong', '', String(c.aguardando)));
+  if (estourados.includes(c)) item.append(el('small', '', `⚠ ${formatarEspera(c.maiorEspera)}`));
+  legenda.append(item);
+ }
+ if (!d.total.aguardando) risco.append(el('p', 'fs-vazio', '✓ Ninguém aguardando médico agora'));
+ else risco.append(barra, legenda);
+ if (estourados.length) risco.append(el('p', 'fs-alerta', `⚠ ${estourados.length === 1 ? '1 classificação passou' : `${estourados.length} classificações passaram`} do tempo-alvo de Manchester`));
+ summary.append(principal, risco, el('small', 'fs-rodape', `Atualizado ${tempoDesde(estado.atualizadoEm)} · abrir fluxo completo →`));
+}
+
 export function mountFlow() {
  const panel = document.querySelector('#flow-panel'), overview = document.querySelector('#overview-panel');
  if (!panel) return;
  panel.innerHTML = '<div class="section-heading"><div><p class="eyebrow">GESTOR SAÚDE · ATUALIZAÇÃO AUTOMÁTICA</p><h2>Fluxo de pacientes</h2></div><div class="actions"><span class="flow-updated" role="status" aria-live="polite">Carregando…</span><button type="button" class="secondary flow-refresh">Atualizar agora</button></div></div><p class="flow-alert" role="alert" hidden></p><div class="flow-kpis"></div><div class="flow-risks"></div><div class="flow-extra"></div><p class="notice">Conta como aguardando quem está com situação AGUARDANDO e ainda sem médico atribuído nos Consultórios Adulto e Pediátrico. O tempo corre desde o encaminhamento ao consultório (o mesmo do Gestor Saúde). Retornos e Box de Emergência não entram. Nenhum dado de paciente é exibido ou guardado.</p>';
- const summary = el('button', 'flow-summary');
- summary.type = 'button';
+ // Cartão clicável (div com papel de botão: um <button> não pode conter os blocos do resumo).
+ const summary = el('div', 'flow-summary');
+ summary.setAttribute('role', 'button'); summary.tabIndex = 0;
  summary.onclick = () => document.querySelector('[data-view="flow"]')?.click();
- overview?.prepend(summary);
+ summary.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); summary.click(); } };
+ const lugar = overview?.querySelector('[data-slot="fluxo"]');
+ if (lugar) lugar.append(summary); else overview?.prepend(summary);
  let estado = null, timer = null, carregando = false;
 
  const visivel = () => !document.hidden && (!panel.hidden || (overview && !overview.hidden));
@@ -68,10 +99,10 @@ export function mountFlow() {
   alerta.hidden = estado.disponivel;
   if (!estado.disponivel) alerta.textContent = `Dados temporariamente indisponíveis: ${estado.erro || 'falha na leitura'}${estado.atualizadoEm ? ` Mostrando a última leitura válida (${tempoDesde(estado.atualizadoEm)}).` : ''}`;
   const d = estado.dados;
-  summary.replaceChildren(el('span', 'eyebrow', 'FLUXO DE PACIENTES AGORA'));
-  if (!d) { summary.append(el('strong', '', estado.disponivel ? 'Sem dados' : 'Indisponível')); panel.querySelector('.flow-kpis').replaceChildren(); panel.querySelector('.flow-risks').replaceChildren(); panel.querySelector('.flow-extra').replaceChildren(); return; }
+  summary.replaceChildren(el('span', 'eyebrow', 'PACIENTES NA UNIDADE · AGORA'));
+  if (!d) { summary.append(el('strong', 'fs-num', estado.disponivel ? 'Sem dados' : 'Indisponível')); panel.querySelector('.flow-kpis').replaceChildren(); panel.querySelector('.flow-risks').replaceChildren(); panel.querySelector('.flow-extra').replaceChildren(); return; }
   summary.classList.toggle('stale', !estado.disponivel);
-  summary.append(el('strong', '', `${d.total.aguardando} aguardando`), el('span', '', `Maior espera ${formatarEspera(d.total.maiorEspera)} · Adulto ${d.adulto.aguardando} · Pediatria ${d.pediatria.aguardando}`), el('small', '', `Atualizado ${tempoDesde(estado.atualizadoEm)} · abrir fluxo →`));
+  resumoPainel(summary, d, estado);
   panel.querySelector('.flow-kpis').replaceChildren(
    tile('AGUARDANDO AGORA', String(d.total.aguardando), `Média ${formatarEspera(d.total.media)}`),
    tile('MAIOR ESPERA', formatarEspera(d.total.maiorEspera), 'adulto + pediatria'),

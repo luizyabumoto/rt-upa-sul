@@ -2,7 +2,7 @@ export async function mountPush(){
  const host=document.querySelector('#overview-panel');if(!host)return;
  const section=document.createElement('section');section.className='card push-settings';
  section.innerHTML='<h2>Lembretes no celular</h2><p>Um aviso diário a partir das 8h (horário de Cuiabá), quando houver pendências para hoje ou atrasadas. Salve as pendências online para receber. O aviso não mostra nomes nem detalhes.</p><p id="push-status" role="status" aria-live="polite"></p><div class="actions"><button id="push-enable" type="button">Ativar neste aparelho</button><button id="push-test" class="secondary" type="button" hidden>Enviar teste</button><button id="push-disable" class="secondary" type="button" hidden>Desativar neste aparelho</button></div>';
- host.append(section);const status=section.querySelector('#push-status'),enable=section.querySelector('#push-enable'),test=section.querySelector('#push-test'),disable=section.querySelector('#push-disable');
+ (host.querySelector('[data-slot="extra"]')||host).append(section);const status=section.querySelector('#push-status'),enable=section.querySelector('#push-enable'),test=section.querySelector('#push-test'),disable=section.querySelector('#push-disable');
  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
  if(ios&&!standalone){status.textContent='No iPhone, abra no Safari → Compartilhar → Adicionar à Tela de Início. Depois abra pelo ícone e toque em Ativar neste aparelho. Requer iOS 16.4 ou superior.';enable.hidden=true;return;}

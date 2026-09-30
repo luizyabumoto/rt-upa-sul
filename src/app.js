@@ -17,6 +17,7 @@ import {mountAlertasEscala} from './escala-alertas.js';
 import {mountVersoes} from './versoes.js';
 import {reincluirMedico} from './cadastro.js';
 import {mountResumo} from './resumo.js';
+import {mountCabecalho, mountAtencao} from './painel.js';
 import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
@@ -124,6 +125,7 @@ try{mountHistorico(storage);}catch(error){console.error('Histórico de trocas',e
 try{mountAlertasEscala(storage,seed);}catch(error){console.error('Vagas e carga',error);}
 try{mountVersoes(storage);}catch(error){console.error('Versões',error);}
 try{mountResumo(storage,seed);}catch(error){console.error('Resumo do dia',error);}
+try{mountCabecalho();mountAtencao(storage,seed);}catch(error){console.error('Médicos do plantão',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

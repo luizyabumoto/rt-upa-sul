@@ -172,8 +172,8 @@ export function mountTrocas(storage, seed) {
  const overview = document.querySelector('#overview-panel');
  if (!overview) return;
  const box = el('section', 'trocas-alerta'); box.hidden = true;
- const resumoFluxo = overview.querySelector('.flow-summary');
- if (resumoFluxo) resumoFluxo.after(box); else overview.prepend(box);
+ const lugar = overview.querySelector('[data-slot="alertas"]'), resumoFluxo = overview.querySelector('.flow-summary');
+ if (lugar) lugar.prepend(box); else if (resumoFluxo) resumoFluxo.after(box); else overview.prepend(box);
  let suspeitas = [];
 
  function render() {
