@@ -1,7 +1,7 @@
 // Cadastro de médicos: excluir (encerra os dias fixos a partir de uma data e tira das listas), completar o CRM
 // "A CONFIRMAR" (à mão, com a busca do CFM, ou sozinho pelo Gestor Saúde quando o relatório trouxer o registro).
 // Nada disso mexe em plantões passados, trocas, coberturas nem no histórico.
-import {parse, doctorIdentity, recurringRule, MISSING_CRM} from './scheduling.js';
+import {parse, doctorIdentity, recurringRule, bounds, vacationConflicts, MISSING_CRM} from './scheduling.js';
 
 export const CFM_BUSCA = 'https://portal.cfm.org.br/busca-medicos';
 const nome = d => String(d || '').split('\n')[0].trim();
@@ -111,3 +111,37 @@ export function completarCrms(storage, medicos, mapa) {
  return feitos;
 }
 
+
+// Quadro da semana dos fixos em vigor na data: posto × dia da semana, com postos sem fixo, choques de horário
+// do mesmo médico no mesmo dia, mudanças já agendadas e a carga semanal de cada médico.
+export const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
+const proximoDia = (data, weekday) => { const d = new Date(data + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + ((weekday - d.getUTCDay() + 7) % 7)); return d.toISOString().slice(0, 10); };
+export function quadroFixos(seed, storage, data) {
+ const futuros = parse(storage, 'roster', []).filter(x => x.start > data).sort((a, b) => a.start.localeCompare(b.start));
+ const afastamentos = parse(storage, 'absences', []);
+ const celulas = new Map(), carga = new Map(), conflitos = [];
+ for (const w of ORDEM_SEMANA) for (let slot = 0; slot < 16; slot++) {
+  const r = recurringRule(seed, storage, data, w, slot);
+  const futuro = futuros.find(x => x.weekday === w && x.slot === slot);
+  // Férias (Pendências) ou afastamento (Médicos e fixos) no próximo dia da semana a partir da data.
+  const dia = proximoDia(data, w), doctor = r?.doctor || '';
+  const ausente = doctor && (vacationConflicts(storage, doctor, dia, slot).length ? 'férias' : afastamentos.some(a => doctorIdentity(a.doctor) === doctorIdentity(doctor) && a.start <= dia && dia <= a.end) ? 'afastado' : '');
+  celulas.set(`${w}|${slot}`, {weekday: w, slot, doctor, generic: !!r?.generic, revisar: r?.status === 'review', futuro: futuro ? {start: futuro.start, doctor: futuro.doctor} : null, conflito: false, ausente: ausente || '', dia});
+ }
+ for (const w of ORDEM_SEMANA) {
+  const doDia = [...celulas.values()].filter(c => c.weekday === w && c.doctor);
+  for (const c of doDia) {
+   const [a, b] = bounds(c.slot, data), id = doctorIdentity(c.doctor);
+   const m = carga.get(id) || {doctor: c.doctor, plantoes: 0, horas: 0};
+   m.plantoes += 1; m.horas += b - a; carga.set(id, m);
+   for (const o of doDia) {
+    if (o.slot <= c.slot || doctorIdentity(o.doctor) !== id) continue;
+    const [x, y] = bounds(o.slot, data);
+    if (a < y && x < b) { c.conflito = o.conflito = true; conflitos.push({weekday: w, doctor: c.doctor, slots: [c.slot, o.slot]}); }
+   }
+  }
+ }
+ // Cinderelas não costumam existir no fim de semana: posto vazio ali não conta como pendência.
+ const semFixo = [...celulas.values()].filter(c => !c.doctor && !(c.slot >= 14 && (c.weekday === 0 || c.weekday === 6)));
+ return {celulas, semFixo, conflitos, carga};
+}
