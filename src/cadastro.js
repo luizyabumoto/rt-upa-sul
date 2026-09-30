@@ -1,7 +1,7 @@
 // Cadastro de médicos: excluir (encerra os dias fixos a partir de uma data e tira das listas), completar o CRM
 // "A CONFIRMAR" (à mão, com a busca do CFM, ou sozinho pelo Gestor Saúde quando o relatório trouxer o registro).
 // Nada disso mexe em plantões passados, trocas, coberturas nem no histórico.
-import {parse, doctorIdentity, recurringRule, bounds, vacationConflicts, MISSING_CRM} from './scheduling.js';
+import {parse, doctorIdentity, recurringRule, baseDoctor, bounds, vacationConflicts, CLINICO_TURNS, MISSING_CRM} from './scheduling.js';
 
 export const CFM_BUSCA = 'https://portal.cfm.org.br/busca-medicos';
 const nome = d => String(d || '').split('\n')[0].trim();
@@ -15,7 +15,7 @@ export const excluidos = storage => new Set(parse(storage, 'excluidos', []).map(
 export function fixosDoMedico(seed, storage, doctor, desde) {
  const id = doctorIdentity(doctor), fixos = [];
  for (let w = 0; w < 7; w++) for (let slot = 0; slot < 16; slot++) {
-  const r = recurringRule(seed, storage, desde, w, slot);
+  const r = recurringRule(seed, storage, desde, w, slot, true);
   if (r?.doctor && !r.generic && doctorIdentity(r.doctor) === id) fixos.push({weekday: w, slot, doctor: r.doctor});
  }
  for (const x of parse(storage, 'roster', []).filter(x => x.start > desde && x.doctor && doctorIdentity(x.doctor) === id).sort((a, b) => a.start.localeCompare(b.start))) {
@@ -138,8 +138,9 @@ export function quadroFixos(seed, storage, data) {
  const afastamentos = parse(storage, 'absences', []);
  const celulas = new Map(), carga = new Map(), conflitos = [];
  for (const w of ORDEM_SEMANA) for (let slot = 0; slot < 16; slot++) {
-  const r = recurringRule(seed, storage, data, w, slot);
-  const futuro = futuros.find(x => x.weekday === w && x.slot === slot);
+  const r = recurringRule(seed, storage, data, w, slot, true);
+  const proximo = futuros.find(x => x.weekday === w && x.slot === slot);
+  const futuro = proximo && doctorIdentity(proximo.doctor) !== doctorIdentity(r?.doctor || '') ? proximo : null;
   // Férias (Pendências) ou afastamento (Médicos e fixos) no próximo dia da semana a partir da data.
   const dia = proximoDia(data, w), doctor = r?.doctor || '';
   const ausente = doctor && (vacationConflicts(storage, doctor, dia, slot).length ? 'férias' : afastamentos.some(a => doctorIdentity(a.doctor) === doctorIdentity(doctor) && a.start <= dia && dia <= a.end) ? 'afastado' : '');
@@ -161,4 +162,27 @@ export function quadroFixos(seed, storage, data) {
  // Cinderelas não costumam existir no fim de semana: posto vazio ali não conta como pendência.
  const semFixo = [...celulas.values()].filter(c => !c.doctor && !(c.slot >= 14 && (c.weekday === 0 || c.weekday === 6)));
  return {celulas, semFixo, conflitos, carga};
+}
+
+// Clínicos 1 a 4 são postos iguais: o número só importa para a planilha oficial. Ao fixar alguém num posto de
+// clínico, ele vai para um posto de clínico LIVRE naquele dia da semana e turno — ninguém sai. Só quando os 4 estão
+// ocupados é preciso escolher quem sai. dataReal (opcional): também exige o posto livre na escala desse dia.
+export function postoClinicoParaFixo(seed, storage, start, weekday, slotPedido, doctor, dataReal = null) {
+ const turno = CLINICO_TURNS.dia.includes(slotPedido) ? 'dia' : CLINICO_TURNS.noite.includes(slotPedido) ? 'noite' : null;
+ if (!turno) return {slot: slotPedido, livre: true, turno: null};
+ const id = doctorIdentity(doctor);
+ const ocupados = CLINICO_TURNS[turno].map(s => {
+  const fixo = recurringRule(seed, storage, start, weekday, s, true)?.doctor || '';
+  const noDia = dataReal ? baseDoctor(seed, storage, dataReal, s) : '';
+  return {slot: s, doctor: fixo, noDia};
+ });
+ const meu = o => (o.doctor && doctorIdentity(o.doctor) === id);
+ const ja = ocupados.find(meu);
+ if (ja) return {slot: ja.slot, livre: true, jaEsta: true, turno, ocupados};
+ const livre = o => !o.doctor && (!o.noDia || doctorIdentity(o.noDia) === id);
+ const pedido = ocupados.find(o => o.slot === slotPedido);
+ if (livre(pedido)) return {slot: slotPedido, livre: true, turno, ocupados};
+ const outro = ocupados.find(livre);
+ if (outro) return {slot: outro.slot, livre: true, movido: true, turno, ocupados};
+ return {slot: slotPedido, livre: false, turno, ocupados};
 }

@@ -39,20 +39,22 @@ function pinnedRule(seed,storage,date,weekday,slot){
 // Igual a pinnedRule, mas também considera a escala exata importada (seed.assignments)
 // quando não há padrão/roster cobrindo a data — é o que "reserva" um slot pra fins de
 // preenchimento genérico, mesmo quando o único registro daquele dia é o histórico importado.
-function nonGenericResolution(seed,storage,date,weekday,slot){
+function nonGenericResolution(seed,storage,date,weekday,slot,soFixo=false){
  const rule=pinnedRule(seed,storage,date,weekday,slot);
- if(rule?.status==='custom'||slot>=14)return rule;
+ if(rule?.status==='custom'||slot>=14||soFixo)return rule;
  // A escala importada só vale para o próprio dia: consultando outro dia da semana (aba Médicos e fixos),
  // ela não pode ser repetida como se fosse fixo daquele dia.
  const exact=new Date(date+'T12:00:00').getDay()===weekday&&seed.assignments.find(x=>x.date===date&&x.slot===slot);
  if(exact)return {doctor:exact.doctor,status:'regular'};
  return rule;
 }
-export function recurringRule(seed,storage,date,weekday,slot){
+// soFixo: só o padrão (fixos do site, padrão importado, genéricos), sem a escala importada do próprio dia —
+// é o que as telas de dias fixos precisam; a escala do dia (plannedDoctor) continua usando a importada.
+export function recurringRule(seed,storage,date,weekday,slot,soFixo=false){
  const turn=clinicoTurnForSlot(slot);
  if(!turn)return pinnedRule(seed,storage,date,weekday,slot);
  const group=CLINICO_TURNS[turn];
- const pinned=new Map(group.map(s=>[s,nonGenericResolution(seed,storage,date,weekday,s)]));
+ const pinned=new Map(group.map(s=>[s,nonGenericResolution(seed,storage,date,weekday,s,soFixo)]));
  const taken=new Set([...pinned.values()].filter(r=>r?.doctor).map(r=>doctorIdentity(r.doctor)));
  const pool=genericClinicoDoctors(storage,date,weekday,turn).filter(doctor=>!taken.has(doctorIdentity(doctor)));
  const emptySlots=group.filter(s=>!pinned.get(s)?.doctor);
