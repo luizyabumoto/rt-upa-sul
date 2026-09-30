@@ -39,3 +39,12 @@ test('cobertura confirmada justifica; plantão com menos de 2 horas não entra',
  assert.equal(linha.tipo, 'cobertura');
  assert.deepEqual(faltasETrocas(seed, store, registros, [NOITE], Date.parse('2026-09-29T20:00:00-04:00')), []);
 });
+
+test('Escala × produção usa a escala original: quem faltou continua lá depois da troca automática', async () => {
+ const {escaladosOriginais} = await import('../src/production.js');
+ const store = new MemoryStore();
+ aplicarTrocas(seed, store, NOITE, registros);
+ const nomes = escaladosOriginais(seed, store, NOITE.data, 'N');
+ assert.ok(nomes.some(n => n.startsWith('ANA PAULA')));
+ assert.ok(!nomes.some(n => n.startsWith('MARCELA')));
+});

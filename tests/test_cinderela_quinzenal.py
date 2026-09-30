@@ -52,6 +52,21 @@ class CinderelaQuinzenalTests(unittest.TestCase):
             c, _ = celulas(saida)
         self.assertEqual({c[k] for k in c if k.startswith('B') and 'às' in c[k]}, {'11h às 17h', '12h às 18h'})
 
+    def test_medico_de_ferias_fica_fora_do_preenchimento_automatico(self):
+        from export_excel import planned_doctor
+        ferias = {'organizer': [{'kind': 'task', 'type': 'Férias', 'doctor': 'JULIANE ZANINA\nCRM 15902 - COAPH', 'date': '2026-10-16', 'endDate': '2026-10-31'}]}
+        sem = [d for d in ('2026-10-17', '2026-10-20') for s in range(14) if 'JULIANE' in planned_doctor(d, s, {})]
+        self.assertTrue(sem)                                     # sem férias ela aparece
+        self.assertFalse([d for d in ('2026-10-17', '2026-10-20') for s in range(14) if 'JULIANE' in planned_doctor(d, s, ferias)])
+
+    def test_nomes_dos_arquivos(self):
+        from export_excel import nome_arquivo, content_disposition
+        self.assertEqual(nome_arquivo('regular', 2026, 10, 1), 'ESCALA MÉDICA 1 QUINZENA DE OUTUBRO DE 2026- UPA SUL.xlsx')
+        self.assertEqual(nome_arquivo('cinderela', 2026, 10, 2), 'CINDERELAS 2 QUINZENA DE OUTUBRO- UPA SUL.xlsx')
+        cabecalho = content_disposition(nome_arquivo('regular', 2026, 3, 1))
+        cabecalho.encode('latin-1')                               # cabeçalho HTTP válido
+        self.assertIn("filename*=UTF-8''ESCALA%20M%C3%89DICA%201%20QUINZENA%20DE%20MAR%C3%87O", cabecalho)
+
     def test_quinzena_que_toca_quatro_semanas(self):
         # 16/08/2026 é domingo: 16 | 17-23 | 24-30 | 31.
         with tempfile.TemporaryDirectory() as pasta:

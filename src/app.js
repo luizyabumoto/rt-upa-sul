@@ -17,7 +17,7 @@ import {mountAlertasEscala} from './escala-alertas.js';
 import {mountVersoes} from './versoes.js';
 import {reincluirMedico} from './cadastro.js';
 import {mountResumo} from './resumo.js';
-import {fortnight, WEEKDAYS} from './calendar.js';
+import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
 let storage;
 try { storage = await connectStore(); } catch(error) { document.querySelector('main').textContent = error.message; throw error; }
@@ -139,7 +139,9 @@ document.querySelector('#restore-file').addEventListener('change',async event=>{
 
 Os dados atuais com o mesmo tipo serão trocados pelos do arquivo e salvos online. Se tiver dúvida, baixe antes uma cópia de segurança do estado atual.`))return;for(const [key,value] of Object.entries(data.items))storage.setItem(key,value);settings();render();document.dispatchEvent(new Event('rt-data-restored'))}catch(error){alert(`Não foi possível restaurar: ${error.message}`)}finally{event.target.value=''}});
 
-async function exportExcel(){const button=document.querySelector('#excel');button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:Number(document.querySelector('#year').value),month:Number(monthEl.value),half:Number(document.querySelector('#half').value),items})});if(!response.ok)throw new Error(response.status===501?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':await response.text());const blob=await response.blob();const match=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=match?.[1]||'escala-medica.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Exportar Excel oficial'}}
+// Excel das cinderelas da quinzena escolhida no topo (o botão da aba Cinderelas usa o dia aberto na tela).
+async function exportCinderelas(){const button=document.querySelector('#excel-cinderela'),year=Number(document.querySelector('#year').value),month=Number(monthEl.value),half=Number(document.querySelector('#half').value);button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const date=`${year}-${String(month).padStart(2,'0')}-${half===1?'01':'16'}`;const response=await fetch('/api/export-cinderela',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,items})});if(!response.ok)throw new Error(response.status===404?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':'Não foi possível gerar agora. Confira seu acesso e tente novamente.');const a=document.createElement('a');a.href=URL.createObjectURL(await response.blob());a.download=nomeArquivo('cinderela',year,month,half);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Excel · cinderelas'}}
+async function exportExcel(){const button=document.querySelector('#excel');button.disabled=true;button.textContent='Gerando Excel…';try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key)}const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:Number(document.querySelector('#year').value),month:Number(monthEl.value),half:Number(document.querySelector('#half').value),items})});if(!response.ok)throw new Error(response.status===501?'Inicie o protótipo com py server.py, conforme COMO-ABRIR.txt.':await response.text());const blob=await response.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nomeArquivo('regular',Number(document.querySelector('#year').value),Number(monthEl.value),Number(document.querySelector('#half').value));a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(error){alert(`Exportação indisponível: ${error.message}`)}finally{button.disabled=false;button.textContent='Excel · escala 12 h'}}
 // Conferência antes de exportar: mostra vagas, férias/afastamentos, choques de horário e CRMs
 // repetidos da quinzena. Exportar continua possível, mas só depois de ver a lista.
 const reviewDialog=document.createElement('dialog');reviewDialog.className='review-dialog';document.body.append(reviewDialog);
@@ -152,6 +154,7 @@ function reviewSection(title,hint,lines){
  if(lines.length>40){const more=document.createElement('li');more.textContent=`… e mais ${lines.length-40}`;list.append(more)}
  section.append(heading,help,list);return section;
 }
+document.querySelector('#excel-cinderela')?.addEventListener('click',exportCinderelas);
 document.querySelector('#excel').addEventListener('click',()=>{
  let days;try{days=fortnight(Number(document.querySelector('#year').value),Number(monthEl.value),Number(document.querySelector('#half').value))}catch{return alert('Escolha um ano, mês e quinzena válidos.')}
  const review=periodReview(seed,storage,days.map(d=>d.date)),period=`${days[0].day} a ${days.at(-1).day} de ${months[days[0].month-1]} de ${days[0].year}`;
@@ -165,7 +168,7 @@ document.querySelector('#excel').addEventListener('click',()=>{
   reviewSection('Médico afastado escalado','Afastamentos cadastrados em Médicos e fixos.',review.absences.map(v=>`${shortDate(v.date)} · ${slots[v.slot]} · ${shortName(v.doctor)}`)),
   reviewSection('Choque de horário','O mesmo médico em dois postos ao mesmo tempo.',review.overlaps.map(o=>`${shortName(o.other.doctor)} · ${shortDate(o.date)} ${slots[o.slot]} × ${shortDate(o.other.date)} ${slots[o.other.slot]}`)),
   reviewSection('CRM repetido','O mesmo CRM aparece com nomes diferentes. Corrija o cadastro.',review.sharedCrm.map(c=>`CRM ${c.crm} · ${c.doctors.map(shortName).join(' / ')}`)),
-  reviewSection('CRM a confirmar','Médicos escalados sem número de CRM. Informe o CRM correto no cadastro.',review.missingCrm.map(shortName))
+  reviewSection('CRM a confirmar','Médicos escalados sem número de CRM. Complete em Médicos e fixos › CRM a confirmar (tem o botão Buscar no CFM).',review.missingCrm.map(shortName))
  ])if(section)form.append(section);
  const actions=document.createElement('div');actions.className='actions';
  const go=document.createElement('button');go.value='export';go.textContent=review.total?'Exportar assim mesmo':'Exportar Excel';

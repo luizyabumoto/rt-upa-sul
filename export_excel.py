@@ -137,17 +137,32 @@ def recurring_rule(date_text, slot, backup):
             return pool[index], 'custom'
     return pinned[slot]
 
+def on_vacation(doctor, date_text, slot, backup):
+    """Espelha scheduling.js:vacationConflicts — férias cadastradas em Pendências que cobrem o plantão."""
+    if not doctor:
+        return False
+    end = date_text
+    if slot_bounds(slot, date_text)[1] > 24:
+        end = (dt.date.fromisoformat(date_text) + dt.timedelta(days=1)).isoformat()
+    who = doctor_identity(doctor)
+    return any(x.get('kind') == 'task' and x.get('type') == 'Férias' and doctor_identity(x.get('doctor', '')) == who
+               and x.get('date') and x.get('endDate') and x['date'] <= end and x['endDate'] >= date_text
+               for x in backup.get('organizer', []))
+
+
 def planned_doctor(date_text, slot, backup):
-    """Espelha scheduling.js:plannedDoctor."""
+    """Espelha scheduling.js:plannedDoctor. O preenchimento automático (fixo, padrão, cinderela) não coloca médico
+    de férias: o posto fica vago, igual na tela. A escala importada e as edições manuais não mudam."""
     doctor, status = recurring_rule(date_text, slot, backup)
+    ferias = lambda d: '' if on_vacation(d, date_text, slot, backup) else (d or '')
     if status == 'custom':
-        return doctor or ''
+        return ferias(doctor)
     if slot >= 14:
-        return doctor or ''
+        return ferias(doctor)
     exact = next((r for r in SEED['assignments'] if r['date'] == date_text and r['slot'] == slot), None)
     if exact is not None:
         return exact['doctor']
-    return doctor or ''
+    return ferias(doctor)
 
 def color_writer(styles,sheet_data):
     fonts=styles.find(Q('fonts'));xfs=styles.find(Q('cellXfs'));cache={}
@@ -313,6 +328,24 @@ def export(year, month, half, backup, template, output):
                 data=replacement if member.filename=='xl/worksheets/sheet1.xml' else serialize_xml(styles) if member.filename=='xl/styles.xml' else original.read(member.filename)
                 target.writestr(member,data)
     return schedule
+
+
+MESES_ARQUIVO = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO']
+
+
+def nome_arquivo(tipo, year, month, half, ext='xlsx'):
+    """Espelha calendar.js:nomeArquivo — "ESCALA MÉDICA 1 QUINZENA DE OUTUBRO DE 2026- UPA SUL.xlsx"."""
+    mes = MESES_ARQUIVO[month - 1]
+    if tipo == 'cinderela':
+        return f'CINDERELAS {half} QUINZENA DE {mes}- UPA SUL.{ext}'
+    return f'ESCALA MÉDICA {half} QUINZENA DE {mes} DE {year}- UPA SUL.{ext}'
+
+
+def content_disposition(nome):
+    """Cabeçalho de download com acentos (RFC 6266) e uma versão sem acento para navegadores antigos."""
+    from urllib.parse import quote
+    simples = unicodedata.normalize('NFKD', nome).encode('ascii', 'ignore').decode()
+    return f'attachment; filename="{simples}"; filename*=UTF-8\'\'{quote(nome)}'
 
 
 def fortnight_of(date_text):

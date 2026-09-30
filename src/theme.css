@@ -201,6 +201,9 @@ dialog::backdrop{background:rgba(3,6,10,.72);backdrop-filter:blur(3px)}
  .workspace-nav{border-radius:12px!important;margin:12px 0 16px!important}
  .workspace-nav button{padding:8px 11px;font-size:12.5px}
  #roster-cards.day-cards{columns:1}
+ /* Quinzena no celular: mês com mais espaço que o ano ("Setembro" não corta) e setas mais discretas */
+ .periodo-linha{grid-template-columns:36px 1.6fr 1fr 36px!important}
+ .periodo-linha select,.periodo-linha input{font-size:14px!important;padding-left:10px;padding-right:22px}
  .prod-controls select,.prod-controls input{min-width:0;width:100%}
  .prod-controls label{flex:1 1 140px}
 }
@@ -233,3 +236,10 @@ body.login-page{font-family:var(--font)!important;font-size:15px;display:grid;pl
 #organizer .crm-linha input{width:180px;flex:0 0 180px}
 .roster-excluir{width:100%;margin-top:8px}
 .roster-line .roster-excluir{width:auto;margin:0 0 0 8px}
+/* Excluir dias fixos (janela Alterar) */
+.excluir-fixos{margin:14px 0;padding:12px 14px;border:1px solid var(--danger-line);border-radius:var(--radius-sm);background:var(--danger-soft)}
+.excluir-fixos legend{padding:0 6px;color:var(--danger-text);font-weight:700;font-size:13px}
+.excluir-fixos .notice{margin:4px 0 8px}
+.excluir-lista{display:grid;gap:6px;margin-bottom:10px;max-height:220px;overflow:auto}
+label.excluir-item{display:flex!important;align-items:center;gap:8px;font-size:13px!important;font-weight:500!important;color:var(--text)!important;letter-spacing:0;cursor:pointer}
+#organizer label.excluir-item input{width:16px!important;flex:0 0 16px}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {MemoryStore} from '../src/online-store.js';
 import {baseDoctor, doctorChoices, parse} from '../src/scheduling.js';
-import {excluirMedico, reincluirMedico, fixosDoMedico, atualizarCrm, completarCrms, excluidos} from '../src/cadastro.js';
+import {excluirMedico, excluirDiasFixos, reincluirMedico, fixosDoMedico, atualizarCrm, completarCrms, excluidos} from '../src/cadastro.js';
 const seed = JSON.parse(readFileSync(new URL('../src/seed.json', import.meta.url), 'utf8'));
 const MARCELA = 'MARCELA BRINGEL FRANCO\nCRM A CONFIRMAR - COAPH';
 
@@ -52,4 +52,20 @@ test('dias fixos não repetem a escala do dia escolhido em todos os dias da sema
  // 29/09 ela está no Clínico 1 diurno e noturno; o padrão de setembro tem 5 dias fixos dela, não 14.
  assert.equal(fixosDoMedico(seed, store, juliane, '2026-09-29').fixos.length, 5);
  assert.equal(fixosDoMedico(seed, store, juliane, '2026-10-05').fixos.length, 4);
+});
+
+test('excluir só alguns dias fixos: a escala muda a partir da data e o médico continua no cadastro', () => {
+ const store = new MemoryStore(), juliane = 'JULIANE ZANINA\nCRM 15902 - COAPH';
+ const {fixos} = fixosDoMedico(seed, store, juliane, '2026-10-20');
+ const terca = fixos.find(f => f.weekday === 2 && f.slot === 7), sabado = fixos.find(f => f.weekday === 6);
+ assert.ok(terca && sabado);
+ assert.match(baseDoctor(seed, store, '2026-10-27', 7), /^JULIANE/);
+ excluirDiasFixos(store, {fixos: [terca]}, '2026-10-20');
+ assert.equal(baseDoctor(seed, store, '2026-10-20', 7), '');                       // a partir da data: sem fixo
+ assert.equal(baseDoctor(seed, store, '2026-10-27', 7), '');
+ assert.match(baseDoctor(seed, store, '2026-10-13', 7), /^JULIANE/);               // antes da data: igual
+ assert.match(baseDoctor(seed, store, '2026-10-24', sabado.slot), /^JULIANE/);     // outro dia fixo continua
+ assert.equal(fixosDoMedico(seed, store, juliane, '2026-10-20').fixos.length, fixos.length - 1);
+ assert.ok(doctorChoices(seed, store).some(d => d.startsWith('JULIANE')));          // continua no cadastro
+ assert.throws(() => excluirDiasFixos(store, {fixos: [sabado]}, ''));
 });

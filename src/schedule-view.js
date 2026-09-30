@@ -1,5 +1,6 @@
 import {doctorPicker} from './doctor-picker.js';
 import {registrarTroca} from './historico.js';
+import {nomeArquivo} from './calendar.js';
 import {overlapIndex,overlapMessage,slots,bounds,hour,parse,baseDoctor,segments,periodKey,vacationConflicts,vacationMessage,affiliation,affiliationClass,patternFor,recurringRule,doctorIdentity,clinicoOccupancy,doctorChoices,doctorOptions,doctorLabel,withAffiliation,AFFILIATIONS} from './scheduling.js';
 const days=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 export function mountScheduleView(storage,seed){
@@ -50,7 +51,7 @@ if(segment.doctor){const badge=document.createElement('span');badge.className='a
    const key=periodKey(date),edits=parse(storage,key,{});registrarTroca(storage,{data:date,slot:occ.free[0],saiu:'',entrou:doctor});edits[`${date}|${occ.free[0]}`]=doctor;storage.setItem('rt-upa:'+key,JSON.stringify(edits));document.dispatchEvent(new Event('rt-schedule-changed'));};
   label.append(select);card.append(label);queueMicrotask(()=>doctorPicker(select));return card;
  }
- view.querySelector('#cinderela-excel').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key);}const response=await fetch('/api/export-cinderela',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dateInput.value,items})});if(!response.ok)throw new Error('Não foi possível exportar. Confira seu acesso e tente novamente.');const blob=await response.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);const [y,m,d]=dateInput.value.split('-');a.download=`ESCALA_CINDERELAS_${Number(d)<=15?1:2}A_QUINZENA_${m}_${y}_UPA_SUL.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch(err){alert(err.message);}finally{b.disabled=false;}};
+ view.querySelector('#cinderela-excel').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{const items={};for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key.startsWith('rt-upa:'))items[key]=storage.getItem(key);}const response=await fetch('/api/export-cinderela',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dateInput.value,items})});if(!response.ok)throw new Error('Não foi possível exportar. Confira seu acesso e tente novamente.');const blob=await response.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);const [y,m,d]=dateInput.value.split('-');a.download=nomeArquivo('cinderela',Number(y),Number(m),Number(d)<=15?1:2);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch(err){alert(err.message);}finally{b.disabled=false;}};
  // "Copiar semana": duplica os 7 dias (domingo a sábado, todos os postos) de uma semana já
  // pronta pra outra semana futura — pra não ter que remontar tudo de novo quando a intenção
  // é repetir a mesma escala. Grava como ajustes de data (igual editar cada posto manualmente),

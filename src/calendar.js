@@ -1,6 +1,15 @@
 /** Grade de escala por calendário civil de Cuiabá (datas locais sem UTC). */
 export const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
+const MESES = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+
+// Nome dos arquivos exportados, no padrão da RT:
+//  "ESCALA MÉDICA 1 QUINZENA DE OUTUBRO DE 2026- UPA SUL.xlsx" e "CINDERELAS 1 QUINZENA DE OUTUBRO- UPA SUL.xlsx".
+export function nomeArquivo(tipo, year, month, half, ext = 'xlsx') {
+ const mes = MESES[Number(month) - 1];
+ return tipo === 'cinderela' ? `CINDERELAS ${half} QUINZENA DE ${mes}- UPA SUL.${ext}` : `ESCALA MÉDICA ${half} QUINZENA DE ${mes} DE ${year}- UPA SUL.${ext}`;
+}
+
 export function fortnight(year, month, half) {
   if (!Number.isInteger(year) || year < 1900 || year > 2200 || !Number.isInteger(month) || month < 1 || month > 12 || ![1, 2].includes(half)) {
     throw new RangeError('Ano, mês ou quinzena inválidos');

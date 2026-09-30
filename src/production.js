@@ -100,6 +100,16 @@ export function escalados(seed, storage, data, turno) {
  return nomes;
 }
 
+// Escala ORIGINAL do plantão: a atual, mas desfazendo as trocas que a própria produção aplicou (quem faltou volta,
+// quem entrou no lugar sai). Sem isso, quem faltou sumia da "Escala × produção" depois da troca automática.
+export function escaladosOriginais(seed, storage, data, turno) {
+ const trocas = parse(storage, 'trocas', []).filter(t => t.data === data && t.turno === turno && ['aplicada', 'mantida'].includes(t.status));
+ const nome = d => String(d || '').split('\n')[0].trim();
+ const nomes = escalados(seed, storage, data, turno).filter(n => !trocas.some(t => mesmoMedico(nome(t.entrou), n)));
+ for (const t of trocas) if (t.saiu && !nomes.some(n => mesmoMedico(n, nome(t.saiu)))) nomes.push(nome(t.saiu));
+ return nomes;
+}
+
 // Período de comparação com a mesma duração: o imediatamente anterior ou o mesmo do ano passado.
 // Recebe e devolve horários locais de Cuiabá (AAAA-MM-DDTHH:MM).
 export function periodoComparado(inicio, fim, modo) {
@@ -406,7 +416,7 @@ export function mountProduction(storage, seed) {
  }
 
  function tabelaCruzamento() {
-  const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escalados(seed, storage, p.data, p.turno)}));
+  const escalas = plantoesDoPeriodo(dados.inicio, dados.fim).map(p => ({...p, nomes: escaladosOriginais(seed, storage, p.data, p.turno)}));
   const linhas = cruzamento(filtra(dados.registros), escalas).filter(casaMedico);
   const box = el('section', 'prod-section');
   box.append(el('h3', '', 'Escala × produção'), el('p', 'chart-sub', `${escalas.length} plantões no período · consultórios adulto e pediátrico da escala comparados com as consultas registradas no Gestor Saúde.`));

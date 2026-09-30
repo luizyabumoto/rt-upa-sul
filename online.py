@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse, quote
 
-from export_excel import export, export_cinderela, slot_bounds, DEFAULT_TEMPLATE
+from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, content_disposition, DEFAULT_TEMPLATE
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
@@ -384,8 +384,7 @@ def app(environ, start_response):
                 except ValueError:
                     raise ApiError(400,'Escolha uma data válida para exportar a quinzena.')
                 body=target.read_bytes()
-            name=f"ESCALA_CINDERELAS_{info['quinzena']}A_QUINZENA_{info['mes']:02d}_{info['ano']}_UPA_SUL.xlsx"
-            extra.append(('Content-Disposition',f'attachment; filename="{name}"'))
+            extra.append(('Content-Disposition',content_disposition(nome_arquivo('cinderela',info['ano'],info['mes'],info['quinzena']))))
             return respond(200,body,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if path == '/api/export-pdf' and method == 'POST':
             from export_pdf import export_pdf
@@ -394,7 +393,7 @@ def app(environ, start_response):
                 body=export_pdf(payload.get('year'),payload.get('month'),payload.get('half'),payload.get('kind'),payload.get('layout'),data)
             except ValueError as error:
                 raise ApiError(400,str(error))
-            extra.append(('Content-Disposition','attachment; filename="ESCALA_UPA_SUL.pdf"'))
+            extra.append(('Content-Disposition',content_disposition(nome_arquivo('cinderela' if payload.get('kind')=='cinderela' else 'regular',payload.get('year'),payload.get('month'),payload.get('half'),'pdf'))))
             return respond(200,body,'application/pdf')
         if path == '/api/export' and method == 'POST':
             data = validate_items(payload.get('items'))
@@ -403,9 +402,13 @@ def app(environ, start_response):
                 raise ApiError(400, 'Período inválido.')
             with tempfile.TemporaryDirectory(prefix='rt-upa-') as temp:
                 target = Path(temp) / 'escala.xlsx'
-                export(year, month, half, data, DEFAULT_TEMPLATE, target)
+                try:
+                    export(year, month, half, data, DEFAULT_TEMPLATE, target)
+                except ValueError as error:
+                    # Mês/quinzena inválidos viravam erro 500 ("servidor não respondeu"); agora a mensagem chega à tela.
+                    raise ApiError(400, str(error))
                 body = target.read_bytes()
-            extra.append(('Content-Disposition', f'attachment; filename="ESCALA_{year}_{month:02d}_{half}.xlsx"'))
+            extra.append(('Content-Disposition', content_disposition(nome_arquivo('regular', year, month, half))))
             return respond(200, body, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         raise ApiError(404, 'Página não encontrada.')
     except ApiError as error:
