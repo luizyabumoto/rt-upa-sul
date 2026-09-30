@@ -10,16 +10,26 @@ const DOCTOR_TEXT = /^([^\n]+)\nCRM\s*(\d+|A CONFIRMAR)?\s*-?\s*(EXTRA\s*SMS|COA
 export const excluidos = storage => new Set(parse(storage, 'excluidos', []).map(x => x.id));
 
 // Dias fixos (posto numerado e "Clínico qualquer") do médico em vigor na data.
+// Inclui também os dias fixos já AGENDADOS para depois da data (inicio = quando passam a valer): sem isso, um fixo
+// cadastrado "a partir de 16/10" não aparecia para excluir enquanto a tela estava em 29/09.
 export function fixosDoMedico(seed, storage, doctor, desde) {
  const id = doctorIdentity(doctor), fixos = [];
  for (let w = 0; w < 7; w++) for (let slot = 0; slot < 16; slot++) {
   const r = recurringRule(seed, storage, desde, w, slot);
-  if (r?.doctor && !r.generic && doctorIdentity(r.doctor) === id) fixos.push({weekday: w, slot});
+  if (r?.doctor && !r.generic && doctorIdentity(r.doctor) === id) fixos.push({weekday: w, slot, doctor: r.doctor});
  }
- const genericos = parse(storage, 'clinicoRoster', []).filter(x => doctorIdentity(x.doctor) === id && x.start <= desde);
- const ultimo = new Map();
- for (const x of genericos.sort((a, b) => a.start.localeCompare(b.start))) ultimo.set(`${x.weekday}|${x.turn}`, x);
- return {fixos, genericos: [...ultimo.values()].filter(x => x.active)};
+ for (const x of parse(storage, 'roster', []).filter(x => x.start > desde && x.doctor && doctorIdentity(x.doctor) === id).sort((a, b) => a.start.localeCompare(b.start))) {
+  if (!fixos.some(f => f.weekday === x.weekday && f.slot === x.slot)) fixos.push({weekday: x.weekday, slot: x.slot, doctor: x.doctor, inicio: x.start});
+ }
+ const linhas = parse(storage, 'clinicoRoster', []).filter(x => doctorIdentity(x.doctor) === id).sort((a, b) => a.start.localeCompare(b.start) || String(a.id).localeCompare(String(b.id)));
+ const genericos = [];
+ for (const chave of new Set(linhas.map(x => `${x.weekday}|${x.turn}`))) {
+  const doTurno = linhas.filter(x => `${x.weekday}|${x.turn}` === chave);
+  const vigente = doTurno.filter(x => x.start <= desde).at(-1), agendado = doTurno.find(x => x.start > desde && x.active);
+  if (vigente?.active) genericos.push(vigente);
+  else if (agendado) genericos.push({...agendado, inicio: agendado.start});
+ }
+ return {fixos, genericos};
 }
 
 // Encerra dias fixos a partir de "desde" (inclusive): o posto fica sem fixo dali em diante e a escala já mostra a
@@ -29,8 +39,15 @@ export function excluirDiasFixos(storage, {fixos = [], genericos = []}, desde) {
  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde || '')) throw new Error('Escolha a data a partir da qual os dias fixos deixam de valer.');
  if (fixos.length) {
   let roster = parse(storage, 'roster', []);
-  for (const {weekday, slot} of fixos) {
-   roster = roster.filter(x => !(x.start === desde && x.weekday === weekday && x.slot === slot));
+  for (const {weekday, slot, doctor, inicio} of fixos) {
+   // Fixos DESTE médico agendados para depois da data também saem (senão, o de data mais recente voltava a valer).
+   const dele = x => doctor && x.start > desde && x.doctor && doctorIdentity(x.doctor) === doctorIdentity(doctor);
+   if (inicio) {
+    // Só agendado: apaga o agendamento dele e não mexe em quem está no posto até lá.
+    roster = roster.filter(x => !(x.weekday === weekday && x.slot === slot && dele(x)));
+    continue;
+   }
+   roster = roster.filter(x => !(x.weekday === weekday && x.slot === slot && (x.start === desde || dele(x))));
    roster.push({id: globalThis.crypto.randomUUID(), start: desde, weekday, slot, doctor: ''});
   }
   storage.setItem('rt-upa:roster', JSON.stringify(roster));
@@ -38,7 +55,7 @@ export function excluirDiasFixos(storage, {fixos = [], genericos = []}, desde) {
  if (genericos.length) {
   let linhas = parse(storage, 'clinicoRoster', []);
   for (const g of genericos) {
-   linhas = linhas.filter(x => !(x.start === desde && x.weekday === g.weekday && x.turn === g.turn && doctorIdentity(x.doctor) === doctorIdentity(g.doctor)));
+   linhas = linhas.filter(x => !(x.weekday === g.weekday && x.turn === g.turn && doctorIdentity(x.doctor) === doctorIdentity(g.doctor) && x.start >= desde));
    linhas.push({id: globalThis.crypto.randomUUID(), start: desde, weekday: g.weekday, turn: g.turn, doctor: g.doctor, active: false});
   }
   storage.setItem('rt-upa:clinicoRoster', JSON.stringify(linhas));

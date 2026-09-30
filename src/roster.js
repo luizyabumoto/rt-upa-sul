@@ -55,8 +55,9 @@ export function mountRoster(storage,seed){
   lista.replaceChildren();caixa.hidden=true;botao.disabled=true;
   if(!rule?.doctor)return;
   const {fixos,genericos}=fixosDoMedico(seed,storage,rule.doctor,date.value);
-  const itens=[...fixos.map(f=>({tipo:'fixo',dado:f,rotulo:`${days[f.weekday]} · ${slotLabel(f.slot)}`,marcado:!rule.generic&&f.weekday===rule.weekday&&f.slot===rule.slot})),
-   ...genericos.map(g=>({tipo:'generico',dado:g,rotulo:`${days[g.weekday]} · ${g.turn==='dia'?'Diurno':'Noturno'} · Clínico (qualquer)`,marcado:!!rule.generic&&g.weekday===rule.weekday&&g.turn===turnOf(rule)}))]
+  const agendado=x=>x.inicio?` · passa a valer em ${fmt(x.inicio)}`:'';
+  const itens=[...fixos.map(f=>({tipo:'fixo',dado:f,rotulo:`${days[f.weekday]} · ${slotLabel(f.slot)}${agendado(f)}`,marcado:!rule.generic&&f.weekday===rule.weekday&&f.slot===rule.slot})),
+   ...genericos.map(g=>({tipo:'generico',dado:g,rotulo:`${days[g.weekday]} · ${g.turn==='dia'?'Diurno':'Noturno'} · Clínico (qualquer)${agendado(g)}`,marcado:!!rule.generic&&g.weekday===rule.weekday&&g.turn===turnOf(rule)}))]
    .sort((a,b)=>a.dado.weekday-b.dado.weekday);
   if(!itens.length)return;
   caixa.hidden=false;
@@ -70,6 +71,16 @@ export function mountRoster(storage,seed){
    try{excluirDiasFixos(storage,{fixos:escolhidos.filter(i=>i.tipo==='fixo').map(i=>i.dado),genericos:escolhidos.filter(i=>i.tipo==='generico').map(i=>i.dado)},desde);}catch(err){alert(err.message);return;}
    date.value=desde;dialog.close();document.dispatchEvent(new Event('rt-schedule-changed'));
   };
+ }
+ // Excluir um dia fixo direto do cartão, a partir da data "Válidos em" (ou só o agendamento, se ainda não começou).
+ function excluirUmDia(doctor,r){
+  const desde=date.value||new Date(Date.now()-4*3600000).toISOString().slice(0,10);
+  const inicio=r.upcoming&&r.start>desde?r.start:null;
+  const rotulo=r.generic?`${days[r.weekday]} · ${turnOf(r)==='dia'?'Diurno':'Noturno'} · Clínico (qualquer)`:`${days[r.weekday]} · ${slotLabel(r.slot)}`;
+  const quando=inicio?`O agendamento que começaria em ${fmt(inicio)} é cancelado; quem está no posto até lá continua.`:`Vale a partir de ${fmt(desde)}; os dias anteriores não mudam e o posto fica sem fixo dali em diante.`;
+  if(!confirm(`Excluir o dia fixo de ${name(doctor)}?\n\n• ${rotulo}\n\n${quando}\nO médico continua no cadastro.`))return;
+  try{excluirDiasFixos(storage,r.generic?{genericos:[{weekday:r.weekday,turn:turnOf(r),doctor,inicio}]}:{fixos:[{weekday:r.weekday,slot:r.slot,doctor,inicio}]},desde);}catch(err){alert(err.message);return;}
+  document.dispatchEvent(new Event('rt-schedule-changed'));
  }
  function open(rule,doctor='',preset=null){
   original=rule?{...rule,turn:turnOf(rule)}:null;
@@ -217,7 +228,8 @@ export function mountRoster(storage,seed){
   }
  }
  // Quadro da semana: posto × dia, com quem é fixo em cada um. Clicar abre a janela já no dia e no posto.
- const curto=d=>{const p=name(d).split(/\s+/);return p.length>2?`${p[0]} ${p.at(-1)}`:name(d);};
+ // Nome curto reconhecível: primeiro nome + dois últimos sobrenomes ("GABRIEL SALVATORI SILVA"), sem da/de/dos.
+ const curto=d=>{const p=name(d).split(/\s+/).filter(t=>!/^(DA|DE|DO|DAS|DOS|E)$/i.test(t));return p.length>3?`${p[0]} ${p.at(-2)} ${p.at(-1)}`:p.join(' ');};
  const GRUPOS=[['DIURNO · 07h–19h',[0,1,2,3,4,5,6]],['NOTURNO · 19h–07h',[7,8,9,10,11,12,13]],['CINDERELAS',[14,15]]];
  const postoCurto=s=>s>=14?`Cinderela ${s-13} · ${hour(bounds(s)[0]).slice(0,2)}h–${hour(bounds(s)[1]).slice(0,2)}h`:slots[s].split(' · ')[1];
  let vista='quadro';try{vista=localStorage.getItem('rt-roster-vista')||'quadro';}catch{/* sem armazenamento */}
@@ -256,7 +268,7 @@ export function mountRoster(storage,seed){
      if(c.conflito){const t=document.createElement('small');t.className='quadro-alerta';t.textContent='⚠ choque de horário';b.append(t);}
      if(c.ausente){const t=document.createElement('small');t.className='quadro-alerta';t.textContent=`⚠ ${c.ausente} em ${fmt(c.dia).slice(0,5)}`;b.append(t);b.classList.add('quadro-ausente');}
      b.title=`${days[w]} · ${slotLabel(slot)}\n${c.doctor?name(c.doctor)+' · '+affiliation(c.doctor)+(c.generic?' · clínico (qualquer)':''):'Sem médico fixo'}\nClique para ${c.doctor?'alterar ou excluir':'definir o fixo'}`;
-     b.onclick=()=>c.doctor?open({doctor:c.doctor,weekday:w,slot,generic:c.generic,status:'custom'}):open(null,'',{weekday:w,slot});
+     b.onclick=()=>c.doctor?open({doctor:c.doctor,weekday:w,slot,generic:c.generic,status:'custom'}):c.futuro?.doctor?open({doctor:c.futuro.doctor,weekday:w,slot,status:'custom',upcoming:true,start:c.futuro.start}):open(null,'',{weekday:w,slot});
      td.append(b);linha.append(td);
     }
     corpo.append(linha);
@@ -268,7 +280,7 @@ export function mountRoster(storage,seed){
  }
  function render(){crmPendentes();quadro();aplicarVista();if(!date.value){registry();return;}root.querySelector('#roster-date-label').textContent=`${days[new Date(date.value+'T12:00:00').getDay()]} · ${fmt(date.value)}`;const pattern=patternFor(seed,date.value);root.querySelector('#roster-source').textContent=pattern?`Base: ${pattern.source}. SMS repetidos foram organizados como fixos; COAPH repetidos como padrão habitual. Extras e posições variáveis precisam de revisão.`:'Sem padrão importado para este período. Você pode cadastrar dias fixos.';const conflicts=seed.assignments.filter(x=>x.doctor&&x.date.slice(0,7)===date.value.slice(0,7)&&x.colorAffiliation&&x.colorAffiliation!==x.affiliation);if(conflicts.length)root.querySelector('#roster-source').textContent+=' Atenção: '+conflicts.map(x=>name(x.doctor)+' em '+fmt(x.date)).join('; ')+' têm divergência entre texto e cor. Mantido o vínculo escrito, sem assumir fixo.';const {groups,review,clinicoRows}=buildGroups(date.value);registry(groups);
  const rowLabel=r=>(r.generic&&!Number.isInteger(r.slot)?`${days[r.weekday]} · ${r.turn==='dia'?'Diurno':'Noturno'} · Clínico (qualquer)`:`${days[r.weekday]} · ${slotLabel(r.slot)}`+(r.generic?' · (qualquer)':''));
- const cards=root.querySelector('#roster-cards');cards.replaceChildren();const query=doctorIdentity(root.querySelector('#roster-search').value);const cargaSemana=quadroFixos(seed,storage,date.value).carga;for(const group of [...groups.values()].sort((a,b)=>name(a.doctor).localeCompare(name(b.doctor),'pt-BR'))){if(query&&!doctorIdentity(group.doctor).includes(query))continue;const card=document.createElement('article');card.className='shift-card';const h=document.createElement('h3');h.textContent=name(group.doctor);card.append(h);const c=cargaSemana.get(doctorIdentity(group.doctor));if(c){const s=document.createElement('small');s.className='roster-carga'+(c.horas>60?' roster-carga-alta':'');s.textContent=`${c.plantoes} ${c.plantoes>1?'plantões':'plantão'} por semana · ${c.horas} h`;card.append(s);}for(const r of group.rules.sort((a,b)=>(a.upcoming===b.upcoming?0:a.upcoming?1:-1)||a.weekday-b.weekday)){const row=document.createElement('div');row.className='roster-line'+(r.upcoming?' roster-upcoming':'');const p=document.createElement('p');p.textContent=rowLabel(r)+(r.upcoming?` · passa a valer em ${fmt(r.start)}`:'')+(r.overflow?' · sem posto vago nesta data':'');const badge=document.createElement('span');badge.className='affiliation '+affiliationClass(r.doctor);badge.textContent=(r.upcoming?'Agendado · ':'')+(r.overflow?'Sem posto hoje · ':'')+affiliation(r.doctor);const button=document.createElement('button');button.className='secondary';button.textContent='Alterar';button.setAttribute('aria-label',`Alterar ${name(group.doctor)} ${rowLabel(r)}`);button.onclick=()=>open(r);row.append(p,badge,button);card.append(row);}const add=document.createElement('button');add.className='secondary';add.textContent='+ Outro dia fixo';add.onclick=()=>open(null,group.doctor);card.append(add,botaoExcluir(group.doctor));cards.append(card);}if(!cards.children.length)cards.textContent='Nenhum médico com dia fixo nesta seleção.';
+ const cards=root.querySelector('#roster-cards');cards.replaceChildren();const query=doctorIdentity(root.querySelector('#roster-search').value);const cargaSemana=quadroFixos(seed,storage,date.value).carga;for(const group of [...groups.values()].sort((a,b)=>name(a.doctor).localeCompare(name(b.doctor),'pt-BR'))){if(query&&!doctorIdentity(group.doctor).includes(query))continue;const card=document.createElement('article');card.className='shift-card';const h=document.createElement('h3');h.textContent=name(group.doctor);card.append(h);const c=cargaSemana.get(doctorIdentity(group.doctor));if(c){const s=document.createElement('small');s.className='roster-carga'+(c.horas>60?' roster-carga-alta':'');s.textContent=`${c.plantoes} ${c.plantoes>1?'plantões':'plantão'} por semana · ${c.horas} h`;card.append(s);}for(const r of group.rules.sort((a,b)=>(a.upcoming===b.upcoming?0:a.upcoming?1:-1)||a.weekday-b.weekday)){const row=document.createElement('div');row.className='roster-line'+(r.upcoming?' roster-upcoming':'');const p=document.createElement('p');p.textContent=rowLabel(r)+(r.upcoming?` · passa a valer em ${fmt(r.start)}`:'')+(r.overflow?' · sem posto vago nesta data':'');const badge=document.createElement('span');badge.className='affiliation '+affiliationClass(r.doctor);badge.textContent=(r.upcoming?'Agendado · ':'')+(r.overflow?'Sem posto hoje · ':'')+affiliation(r.doctor);const button=document.createElement('button');button.className='secondary';button.textContent='Alterar';button.setAttribute('aria-label',`Alterar ${name(group.doctor)} ${rowLabel(r)}`);button.onclick=()=>open(r);const tirar=document.createElement('button');tirar.type='button';tirar.className='secondary danger roster-excluir-dia';tirar.textContent='Excluir';tirar.setAttribute('aria-label',`Excluir ${name(group.doctor)} ${rowLabel(r)}`);tirar.onclick=()=>excluirUmDia(group.doctor,r);row.append(p,badge,button,tirar);card.append(row);}const add=document.createElement('button');add.className='secondary';add.textContent='+ Outro dia fixo';add.onclick=()=>open(null,group.doctor);card.append(add,botaoExcluir(group.doctor));cards.append(card);}if(!cards.children.length)cards.textContent='Nenhum médico com dia fixo nesta seleção.';
  const target=root.querySelector('#roster-review');target.replaceChildren();root.querySelector('#roster-review-title').textContent=`Postos para revisar (${review.length})`;for(const r of review){const line=document.createElement('div');line.className='roster-line';const p=document.createElement('p');p.textContent=`${days[r.weekday]} · ${slotLabel(r.slot)} — ${r.candidates?.length?'Nomes encontrados: '+r.candidates.map(name).join(', '):'Só extras ou vagas na referência'}`;const b=document.createElement('button');b.textContent='Definir fixo';b.className='secondary';b.onclick=()=>open(r,r.candidates?.[0]);line.append(p,b);target.append(line);}
  // Quem está cadastrado (SMS/COAPH, com vínculo regular) mas ainda não tem nenhum dia fixo —
  // pra não esquecer ninguém na hora de montar uma escala nova.
