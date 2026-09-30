@@ -10,6 +10,7 @@ import {mountOrganizer} from './organizer.js';
 import {mountFlow} from './flow.js';
 import {mountProduction} from './production.js';
 import {mountDemand} from './demand.js';
+import {mountEspera} from './espera.js';
 import {mountTrocas} from './trocas.js';
 import {registrarTroca, mountHistorico} from './historico.js';
 import {mountAlertasEscala} from './escala-alertas.js';
@@ -115,7 +116,7 @@ document.querySelector('#backup').addEventListener('click',()=>{const data={vers
 settings();render();
 mountOrganizer(storage,seed);
 // Módulo independente: uma falha no Fluxo de pacientes nunca pode impedir a escala de abrir.
-try{mountFlow();mountDemand(storage,seed);}catch(error){console.error('Fluxo de pacientes',error);}
+try{mountFlow();mountEspera();mountDemand(storage,seed);}catch(error){console.error('Fluxo de pacientes',error);}
 try{mountProduction(storage,seed);}catch(error){console.error('Produção médica',error);}
 try{mountTrocas(storage,seed);}catch(error){console.error('Trocas detectadas',error);}
 try{mountHistorico(storage);}catch(error){console.error('Histórico de trocas',error);}

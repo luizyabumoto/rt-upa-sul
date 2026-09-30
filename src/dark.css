@@ -174,3 +174,11 @@ main{padding-top:22px}
 /* Botões: altura mínima uniforme para alinhar */
 button{min-height:38px}
 @media(max-width:700px){main{padding-top:14px}.section-heading h2{font-size:19px}#overview-panel .welcome h2{font-size:20px}.resumo-valor{font-size:26px}}
+/* Sugestão de troca (Painel e cartão de escalados na Produção médica) */
+.troca.suspeita .troca-pares{margin:6px 0 10px;padding-left:20px;line-height:1.6;color:#ffd9ad}
+.troca.suspeita .actions{display:flex;flex-wrap:wrap;gap:8px}
+.prod-escala-card .troca.suspeita{margin-top:12px;padding:12px 14px;border:1px solid #c97a2e;border-radius:12px;background:#231b12;color:#f1e3d0}
+.prod-escala-card .troca.suspeita p{margin:0;line-height:1.5}
+/* Espera por classificação (Fluxo de pacientes) */
+.espera{margin-top:34px;padding-top:24px;border-top:1px solid var(--rt-line)}
+.espera-tabela h3{margin:18px 0 8px;font-size:15px}

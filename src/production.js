@@ -1,14 +1,15 @@
 // Produção médica: consultas por médico a partir do relatório Produção Analítico do Gestor Saúde.
 // Retornos aparecem só como informação: dar baixa em retorno não significa ter atendido.
 import {segments, doctorIdentity, parse} from './scheduling.js';
+import {trocasDoPlantao, cartaoSugestao, HORAS_ANTES_DE_TROCAR} from './trocas.js';
 
 export const CLASSES = [
  ['emergencia', 'Emergência', '#FF0000'], ['muitoUrgente', 'Muito urgente', '#FF8000'], ['urgente', 'Urgente', '#FFFF00'],
  ['prioridade', 'Prioridade', '#8a11b6'], ['poucoUrgente', 'Pouco urgente', '#008000'], ['naoUrgente', 'Não urgente', '#0000FF'],
  ['procedimentos', 'Procedimentos', '#0d0d0d'], ['semClassificacao', 'Sem classificação', '#C0C0C0'], ['outros', 'Outros', '#888888']];
-const PERIODOS = [['atual', 'Plantão atual · tempo real'], ['anterior', 'Plantão anterior'], ['hoje', 'Hoje (desde 07h)'], ['ontem', 'Ontem (07h a 07h)'],
+export const PERIODOS = [['atual', 'Plantão atual · tempo real'], ['anterior', 'Plantão anterior'], ['hoje', 'Hoje (desde 07h)'], ['ontem', 'Ontem (07h a 07h)'],
  ['semana', 'Últimos 7 dias'], ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['livre', 'Escolher datas…']];
-const AGRUPAR = [['total', 'Período inteiro'], ['plantao', 'Por plantão'], ['dia', 'Por dia'], ['semana', 'Por semana'], ['mes', 'Por mês']];
+export const AGRUPAR = [['total', 'Período inteiro'], ['plantao', 'Por plantão'], ['dia', 'Por dia'], ['semana', 'Por semana'], ['mes', 'Por mês']];
 const HORA = 3600000;
 
 // Horário de Cuiabá (UTC-4 fixo) independente do fuso do aparelho.
@@ -431,6 +432,17 @@ export function mountProduction(storage, seed) {
   const fora = lista.filter(m => m.total && !nomes.some(n => mesmoMedico(m.medico, n)));
   card.append(ul);
   if (fora.length) card.append(el('p', 'notice', `Atenderam sem estar nos consultórios da escala deste plantão: ${fora.map(m => `${m.medico} (${m.total})`).join(', ')}.`));
+  // Possível troca: quem atendeu de fora ocupa os postos vagos e os de quem está sem consultas.
+  // No plantão em andamento, só depois das 2 primeiras horas (o escalado pode estar chegando).
+  const jaEngrenou = !dados.emAndamento || Date.now() - Date.parse(dados.inicio) >= HORAS_ANTES_DE_TROCAR * HORA;
+  if (jaEngrenou) {
+   const plantao = {data, turno}, registros = (dados.registros || []).filter(r => r.data === data && r.turno === turno);
+   const {automaticas, suspeitas} = trocasDoPlantao(seed, storage, plantao, registros);
+   // As automáticas o Painel aplica sozinho; aqui aparecem junto para o RT não precisar esperar a próxima leitura.
+   const todas = [...suspeitas, ...['adulto', 'pediatria'].map(area => automaticas.filter(t => t.area === area)).filter(l => l.length)
+    .map(pares => ({area: pares[0].area, semConsulta: pares.filter(t => t.saiu).map(t => t.saiu.split('\n')[0]), vagas: pares.filter(t => !t.saiu).length, deFora: pares.map(t => ({medico: t.entrou, consultas: t.consultas})), pares}))];
+   for (const s of todas) card.append(cartaoSugestao(seed, storage, plantao, s, render));
+  }
   box.append(card);
  }
 

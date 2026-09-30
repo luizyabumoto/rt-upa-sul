@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {MemoryStore} from '../src/online-store.js';
 import {baseDoctor, parse} from '../src/scheduling.js';
-import {detectar, postosDoPlantao, aplicarTrocas, desfazer, manter, plantoesParaVerificar} from '../src/trocas.js';
+import {detectar, postosDoPlantao, outrosDoPlantao, aplicarTrocas, aplicarSugestao, ignorarSugestao, desfazer, manter, plantoesParaVerificar} from '../src/trocas.js';
 const seed = JSON.parse(readFileSync(new URL('../src/seed.json', import.meta.url), 'utf8'));
 const DATA = '2026-10-01', PLANTAO = {data: DATA, turno: 'D'};
 const nome = d => d.split('\n')[0];
@@ -60,7 +60,11 @@ test('com dúvida (dois de fora ou poucas consultas) não troca sozinho', () => 
  const postos = [{slot: 4, area: 'pediatria', doctor: 'ANA\nCRM 1 - SMS'}, {slot: 5, area: 'pediatria', doctor: 'BIA\nCRM 2 - SMS'}, {slot: 0, area: 'adulto', doctor: 'CARLA\nCRM 3 - SMS'}];
  const base = [{medico: 'BIA', adulto: 0, pediatria: 10}, {medico: 'CARLA', adulto: 20, pediatria: 0}];
  assert.equal(detectar(postos, [...base, {medico: 'DORA', adulto: 0, pediatria: 8}, {medico: 'EVA', adulto: 0, pediatria: 7}]).suspeitas.length, 1);
- assert.deepEqual(detectar(postos, [...base, {medico: 'DORA', adulto: 0, pediatria: 3}]), {automaticas: [], suspeitas: []});
+ assert.deepEqual(detectar(postos, [...base, {medico: 'DORA', adulto: 0, pediatria: 2}]), {automaticas: [], suspeitas: []});
+ // Com poucas consultas vira sugestão (com o par proposto), não troca automática.
+ const pouco = detectar(postos, [...base, {medico: 'DORA', adulto: 0, pediatria: 3}]);
+ assert.deepEqual(pouco.automaticas, []);
+ assert.deepEqual(pouco.suspeitas[0].pares.map(t => [t.slot, t.entrou]), [[4, 'DORA']]);
  const certo = detectar(postos, [...base, {medico: 'DORA', adulto: 0, pediatria: 8}]);
  assert.deepEqual(certo.automaticas.map(t => [t.slot, t.entrou, t.consultas]), [[4, 'DORA', 8]]);
  // Clínico ajudando na pediatria não conta como "sem consulta".
@@ -73,4 +77,47 @@ test('plantão em andamento só é verificado depois de 2 horas', () => {
  const depois = plantoesParaVerificar(new Date('2026-09-28T10:00:00-04:00'));
  assert.deepEqual(depois.map(p => `${p.data}${p.turno}`), ['2026-09-27N', '2026-09-28D']);
  assert.deepEqual(depois[0], {data: '2026-09-27', turno: 'N', inicio: '2026-09-27T19:00', fim: '2026-09-28T07:00'});
+});
+
+// Caso real do noturno de 29/09/2026: Clínico 4 vago, Ana Paula (licença) sem consultas, Thaís Koester sem
+// consultas na pediatria; atenderam de fora Maria Clara, Marcela (adulto) e Yuris (pediatria, 4 consultas).
+const NOITE = {data: '2026-09-29', turno: 'N'};
+const producaoNoite = [
+ {medico: 'JULIANE ZANINA', adulto: 12, pediatria: 0}, {medico: 'LETICIA ILKIU FRANCELINO', adulto: 4, pediatria: 0},
+ {medico: 'THAIS GUIMARAES DE SOUZA', adulto: 0, pediatria: 4}, {medico: 'MARIA CLARA TRETTEL DE OLIVEIRA', adulto: 6, pediatria: 0},
+ {medico: 'MARCELA BRINGEL FRANCO', adulto: 5, pediatria: 0}, {medico: 'YURIS CAROLINA RIVERO BRITO', adulto: 0, pediatria: 4},
+ // Box e Cinderela atendem nos consultórios e não são "de fora".
+ {medico: 'LUCAS DE LA CRUZ MOTA', adulto: 7, pediatria: 0}];
+
+test('posto vago + escalado sem consulta são preenchidos por quem atendeu de fora', () => {
+ const store = new MemoryStore();
+ assert.equal(baseDoctor(seed, store, NOITE.data, 10), '');
+ assert.ok(outrosDoPlantao(seed, store, NOITE.data, 'N').some(d => d.startsWith('LUCAS DE LA CRUZ MOTA')));
+ const r = aplicarTrocas(seed, store, NOITE, producaoNoite);
+ assert.equal(r.mudou, true);
+ // Adulto: 2 postos (vago + Ana Paula) e 2 médicos de fora com 5+ consultas → automático.
+ const adulto = [9, 10].map(slot => nome(baseDoctor(seed, store, NOITE.data, slot))).sort();
+ assert.deepEqual(adulto, ['MARCELA BRINGEL FRANCO', 'MARIA CLARA TRETTEL DE OLIVEIRA']);
+ const historico = parse(store, 'trocas', []);
+ assert.equal(historico.find(h => h.slot === 10).saiu, '');
+ assert.match(historico.find(h => h.slot === 9).saiu, /^ANA PAULA MACHADO/);
+ // Pediatria: Yuris só com 4 consultas → sugestão para o RT aplicar.
+ assert.equal(r.suspeitas.length, 1);
+ const s = r.suspeitas[0];
+ assert.equal(s.area, 'pediatria');
+ assert.deepEqual(s.pares.map(t => [t.slot, t.entrou]), [[12, 'YURIS CAROLINA RIVERO BRITO']]);
+ assert.equal(aplicarSugestao(seed, store, NOITE, s.pares), 1);
+ assert.match(baseDoctor(seed, store, NOITE.data, 12), /^YURIS CAROLINA RIVERO BRITO\nCRM 16442/);
+ // Nada novo depois de aplicado.
+ const denovo = aplicarTrocas(seed, store, NOITE, producaoNoite);
+ assert.equal(denovo.mudou, false);
+ assert.deepEqual(denovo.suspeitas, []);
+});
+
+test('sugestão ignorada não volta a aparecer', () => {
+ const store = new MemoryStore();
+ const r = aplicarTrocas(seed, store, NOITE, producaoNoite);
+ ignorarSugestao(store, NOITE, r.suspeitas[0].pares);
+ assert.deepEqual(aplicarTrocas(seed, store, NOITE, producaoNoite).suspeitas, []);
+ assert.match(baseDoctor(seed, store, NOITE.data, 12), /^THAÍS KOESTER/);
 });

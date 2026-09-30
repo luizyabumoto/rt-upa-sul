@@ -75,7 +75,7 @@ def resumir_producao(linhas):
     """Contagem por plantão e médico. Nada de paciente: só nome do médico, horário e classificação."""
     registros = {}
     for chave, atendimentos in linhas.items():
-        for medico, momento, classificacao in atendimentos:
+        for medico, momento, classificacao, *_ in atendimentos:
             data, turno = plantao_de(momento)
             registro = registros.setdefault((data, turno, medico), {'data': data, 'turno': turno, 'medico': medico,
                                                                     'adulto': 0, 'pediatria': 0, 'retornos': 0, 'classes': {}})
@@ -96,7 +96,7 @@ def resumir_medicos_hora(linhas):
     for chave, atendimentos in linhas.items():
         if chave.startswith('retorno'):
             continue
-        for medico, momento, _ in atendimentos:
+        for medico, momento, *_ in atendimentos:
             relogio[medico][momento.strftime('%Y-%m-%dT%H')] += 1
     resultado = []
     for medico, contagem in relogio.items():
@@ -131,7 +131,7 @@ def resumir_atrasos(linhas):
     for chave, atendimentos in linhas.items():
         if chave.startswith('retorno'):
             continue
-        for medico, momento, _ in atendimentos:
+        for medico, momento, *_ in atendimentos:
             data, turno = plantao_de(momento)
             por_plantao[(data, turno, medico)].append(momento)
     por_medico = defaultdict(lambda: {'plantoes': 0, 'atrasos': [], 'intervalos': []})
@@ -153,6 +153,48 @@ def resumir_atrasos(linhas):
         'atrasoMedio': media(d['atrasos']), 'piorAtraso': round(max(d['atrasos'])) if d['atrasos'] else 0,
         'intervaloMedio': media(d['intervalos']), 'maiorIntervalo': round(max(d['intervalos'])) if d['intervalos'] else 0,
     } for medico, d in por_medico.items()), key=lambda r: (-r['atrasoMedio'], -r['piorAtraso']))
+
+
+# Horário em que o paciente entrou na fila do consultório. O relatório Produção Analítico não tem nome de campo
+# documentado: usa o primeiro destes que vier preenchido. A espera = atendimento - chegada.
+CAMPOS_CHEGADA = ('chegada', 'dataChegada', 'dataHoraChegada', 'horaChegada', 'dataEncaminhamento', 'dataEntrada', 'dataEntradaFila')
+ESPERA_MAXIMA_MIN = 12 * 60   # acima disso é registro esquecido, não espera real
+
+
+def _chegada_relatorio(atendimento):
+    for campo in CAMPOS_CHEGADA:
+        if atendimento.get(campo):
+            momento = _horario(atendimento[campo])
+            if momento:
+                return momento
+    return None
+
+
+def _espera_minutos(momento, chegada):
+    if not chegada:
+        return None
+    minutos = (momento - chegada).total_seconds() / 60
+    return minutos if 0 <= minutos <= ESPERA_MAXIMA_MIN else None
+
+
+def resumir_espera(linhas):
+    """Espera da chegada ao consultório até o atendimento, por plantão, fila e classificação (só consultas).
+    Devolve somas e contagens para a tela calcular médias em qualquer agrupamento. Nada de paciente."""
+    grupos = {}
+    for chave, atendimentos in linhas.items():
+        if chave not in ('adulto', 'pediatria'):
+            continue
+        for _, momento, classificacao, *resto in atendimentos:
+            minutos = _espera_minutos(momento, resto[0] if resto else None)
+            if minutos is None:
+                continue
+            data, turno = plantao_de(momento)
+            classe = CLASSES_PRODUCAO.get(normalizar(classificacao), 'outros')
+            g = grupos.setdefault((data, turno, chave, classe), {'data': data, 'turno': turno, 'fila': chave, 'classe': classe, 'n': 0, 'soma': 0, 'maior': 0})
+            g['n'] += 1
+            g['soma'] += round(minutos)
+            g['maior'] = max(g['maior'], round(minutos))
+    return sorted(grupos.values(), key=lambda g: (g['data'], g['turno'], g['fila'], g['classe']))
 
 
 def normalizar(texto):
@@ -231,6 +273,7 @@ class GestorSaude:
         self.usuario, self.senha = env.get('GESTOR_SAUDE_USUARIO', ''), env.get('GESTOR_SAUDE_SENHA', '')
         self.abrir, self.relogio = abrir, relogio
         self.token, self.expira, self.tipos = None, 0, None
+        self.campos_relatorio = []
         self.trava = threading.Lock()
 
     @property
@@ -334,10 +377,13 @@ class GestorSaude:
                         'atendimentoTipoId': tipo, 'cboId': cbo, 'profissionalId': 0, 'formato': 2,
                         'competenciaInicial': parte.strftime('%Y-%m-%d %H:%M'), 'competenciaFinal': ate.strftime('%Y-%m-%d %H:%M')}, token=self.token) or {}
                     for atendimento in resposta.get('atendimentos') or []:
+                        if not self.campos_relatorio:
+                            self.campos_relatorio = sorted(atendimento)   # só os nomes dos campos, para diagnóstico
                         momento = _horario(atendimento.get('dataAtendimento'))
                         # Descarta aqui os dados do paciente; o limite evita contar duas vezes na emenda das partes.
                         if momento and parte <= momento < ate + timedelta(minutes=1) and (momento < fim + timedelta(minutes=1)):
-                            linhas[chave].append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento, atendimento.get('classificacaoDescricao')))
+                            linhas[chave].append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento,
+                                                  atendimento.get('classificacaoDescricao'), _chegada_relatorio(atendimento)))
                     parte = ate + timedelta(minutes=1) if ate < fim else fim
             return linhas
         return self._com_token(ler)
@@ -408,7 +454,9 @@ class PainelProducao:
             try:
                 resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
                              'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
-                             **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas), 'atrasos': resumir_atrasos(linhas)})(self.cliente.producao(inicio, fim))}
+                             **(lambda linhas: {'registros': resumir_producao(linhas), 'perfilMedicos': resumir_medicos_hora(linhas), 'atrasos': resumir_atrasos(linhas),
+                                                'esperas': resumir_espera(linhas)})(self.cliente.producao(inicio, fim)),
+                             'camposRelatorio': getattr(self.cliente, 'campos_relatorio', [])}
             except GestorSaudeError as erro:
                 if guardado:
                     return {**guardado[1], 'disponivel': False, 'erro': str(erro)}
@@ -420,12 +468,18 @@ class PainelProducao:
 
 
 def resumir_demanda(linhas):
-    """Consultas por hora (adulto e pediatria), para a análise de demanda. Só contagens."""
+    """Consultas por hora (adulto e pediatria), para a análise de demanda. Só contagens.
+    Quando o relatório traz a chegada, soma também a espera por classificação: espera[classe] = [n, minutos]."""
     horas = {}
     for chave, atendimentos in linhas.items():
-        for _, momento, _ in atendimentos:
+        for _, momento, classificacao, *resto in atendimentos:
             hora = horas.setdefault(momento.strftime('%Y-%m-%dT%H'), {'adulto': 0, 'pediatria': 0})
             hora[chave] += 1
+            minutos = _espera_minutos(momento, resto[0] if resto else None)
+            if minutos is not None:
+                classe = CLASSES_PRODUCAO.get(normalizar(classificacao), 'outros')
+                n, soma = hora.setdefault('espera', {}).get(classe, [0, 0])
+                hora['espera'][classe] = [n + 1, soma + round(minutos)]
     return horas
 
 

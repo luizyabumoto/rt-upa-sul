@@ -146,8 +146,6 @@ class RotaProducaoTests(unittest.TestCase):
         self.assertEqual(json.loads(ok['body'])['registros'][0]['medico'], 'ANA')
 
 
-if __name__ == '__main__':
-    unittest.main()
 
 
 class DemandaTests(unittest.TestCase):
@@ -241,3 +239,46 @@ class AtrasosTests(unittest.TestCase):
         at = lambda medico, iso: (medico, datetime.fromisoformat(iso).replace(tzinfo=CUIABA), 'URGENTE')
         linhas = {'adulto': [at('CINDER', '2026-10-06T10:00'), at('CINDER', '2026-10-06T11:00')]}
         self.assertEqual(resumir_atrasos(linhas), [])
+
+
+class EsperaTests(unittest.TestCase):
+    def test_espera_por_plantao_fila_e_classificacao(self):
+        from gestor_saude import resumir_espera
+        linhas = {'adulto': [('ANA', h('2026-09-28T08:30'), 'URGENTE', h('2026-09-28T08:00')),
+                             ('ANA', h('2026-09-28T09:00'), 'Urgente', h('2026-09-28T08:50')),
+                             ('BIA', h('2026-09-28T20:00'), 'POUCO URGENTE', h('2026-09-28T18:00')),
+                             ('BIA', h('2026-09-28T21:00'), 'POUCO URGENTE', None),                     # sem chegada: fora
+                             ('BIA', h('2026-09-28T22:00'), 'POUCO URGENTE', h('2026-09-27T08:00'))],   # esquecido: fora
+                  'pediatria': [('CARLA', h('2026-09-28T10:00'), 'EMERGÊNCIA', h('2026-09-28T10:00'))],
+                  'retornoAdulto': [('ANA', h('2026-09-28T11:00'), 'URGENTE', h('2026-09-28T07:00'))]}
+        self.assertEqual(resumir_espera(linhas), [
+            {'data': '2026-09-28', 'turno': 'D', 'fila': 'adulto', 'classe': 'urgente', 'n': 2, 'soma': 40, 'maior': 30},
+            {'data': '2026-09-28', 'turno': 'D', 'fila': 'pediatria', 'classe': 'emergencia', 'n': 1, 'soma': 0, 'maior': 0},
+            {'data': '2026-09-28', 'turno': 'N', 'fila': 'adulto', 'classe': 'poucoUrgente', 'n': 1, 'soma': 120, 'maior': 120}])
+
+    def test_demanda_soma_espera_por_classificacao_quando_ha_chegada(self):
+        from gestor_saude import resumir_demanda
+        linhas = {'adulto': [('ANA', h('2026-09-28T08:30'), 'URGENTE', h('2026-09-28T08:00')), ('BIA', h('2026-09-28T08:40'), 'URGENTE', None)],
+                  'pediatria': []}
+        self.assertEqual(resumir_demanda(linhas), {'2026-09-28T08': {'adulto': 2, 'pediatria': 0, 'espera': {'urgente': [1, 30]}}})
+
+    def test_cliente_le_a_chegada_do_relatorio_sem_guardar_dados_do_paciente(self):
+        class Relatorio(FakeRelatorio):
+            def __call__(self, pedido, timeout=None):
+                resposta = super().__call__(pedido, timeout)
+                if 'ImprimirProducaoAnalitico' in pedido.full_url:
+                    corpo = json.loads(resposta.read())
+                    for a in corpo['atendimentos']:
+                        a['dataChegada'] = (datetime.fromisoformat(a['dataAtendimento']) - timedelta(minutes=25)).isoformat()
+                    return FakeResponse(json.dumps(corpo).encode())
+                return resposta
+        fake = Relatorio([{'tipo': 1, 'medico': 'ANA', 'dataAtendimento': '2026-09-10T09:00:00'}])
+        cliente = GestorSaude({'GESTOR_SAUDE_USUARIO': 'u', 'GESTOR_SAUDE_SENHA': 's'}, abrir=fake, relogio=lambda: 1_900_000_000)
+        linhas = cliente.producao(h('2026-09-10T07:00'), h('2026-09-10T19:00'))
+        self.assertEqual(linhas['adulto'][0][3], h('2026-09-10T08:35'))
+        self.assertIn('dataChegada', cliente.campos_relatorio)
+        self.assertNotIn('NOME DO PACIENTE', repr(linhas))
+
+
+if __name__ == '__main__':
+    unittest.main()
