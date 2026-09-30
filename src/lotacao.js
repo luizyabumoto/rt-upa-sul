@@ -53,8 +53,13 @@ export function levantamento(seed, storage, datas) {
  return {datas, areas, medicos: [...medicos.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))};
 }
 
+// "Para toda a escala": postos por dia (dia + noite) × 7 dias ÷ plantões de 12 h que cada médico faz na semana.
+// Ex.: clínico 8 × 7 = 56 plantões na semana ÷ 2 = 28 médicos.
+export const PLANTOES_SEMANA = 2;
+export const paraTodaEscala = (area, porSemana = PLANTOES_SEMANA) => area.unidade === 12 && area.porDia && porSemana ? Math.ceil(area.porDia * 7 / porSemana) : null;
+
 // Resumo de uma área considerando só os vínculos escolhidos.
-export function resumoArea(dados, chave, vinculos = VINCULOS, cargaPorMedico = 10) {
+export function resumoArea(dados, chave, vinculos = VINCULOS, porSemana = PLANTOES_SEMANA) {
  const area = AREAS.find(a => a.chave === chave), base = dados.areas[chave];
  const porVinculo = Object.fromEntries(VINCULOS.map(v => [v, {medicos: 0, plantoes: 0}]));
  const lista = [];
@@ -70,30 +75,76 @@ export function resumoArea(dados, chave, vinculos = VINCULOS, cargaPorMedico = 1
   ...area, medicos: lista.sort((a, b) => b.plantoes - a.plantoes || a.nome.localeCompare(b.nome, 'pt-BR')), totalMedicos: lista.length, plantoes,
   necessarios: base.necessarios, vagos: base.vagos, porVinculo,
   cobertura: base.necessarios ? plantoes / base.necessarios : null,
-  // "Para toda a escala": médicos necessários para cobrir todos os plantões do período com a carga de referência.
-  paraTodaEscala: area.unidade === 12 && base.necessarios && cargaPorMedico ? Math.ceil(base.necessarios / cargaPorMedico) : null,
+  paraTodaEscala: paraTodaEscala(area, porSemana),
  };
+}
+
+// ---------------------------------------------------------------- lotação SMS efetivo
+// Quem é "atual SMS" em cada área não sai só da escala do mês: quem está de licença some da escala mas continua
+// lotado. A lista começa automática (médicos SMS do cadastro e quem fez plantão SMS nos últimos 60 dias, na área
+// em que mais fez plantão) e o RT ajusta área e situação de cada um; os ajustes ficam salvos em "lotacao".
+export const AREAS_SMS = ['clinico', 'infantil', 'box'];
+export const SITUACOES = [['ativo', 'Em atividade'], ['licenca-maternidade', 'Licença-maternidade'], ['licenca', 'Licença médica'], ['ferias', 'Férias'], ['afastado', 'Afastado(a)']];
+const somaDias = (data, n) => { const d = new Date(data + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+export const lerLotacao = storage => { const d = parse(storage, 'lotacao', {}); return {porSemana: Number(d?.porSemana) || PLANTOES_SEMANA, medicos: d?.medicos && typeof d.medicos === 'object' ? d.medicos : {}}; };
+export function salvarLotacao(storage, mudar) {
+ const atual = lerLotacao(storage), novo = mudar(atual) || atual;
+ storage.setItem('rt-upa:lotacao', JSON.stringify({porSemana: novo.porSemana, medicos: novo.medicos}));
+}
+
+export function lotacaoSMS(seed, storage, hoje) {
+ const datas = [];
+ for (let d = somaDias(hoje, -60); d <= somaDias(hoje, 31); d = somaDias(d, 1)) datas.push(d);
+ const cont = new Map();
+ const conta = id => { if (!cont.has(id)) cont.set(id, {sms: {}, todos: {}}); return cont.get(id); };
+ for (const data of datas) for (const area of AREAS.filter(a => AREAS_SMS.includes(a.chave))) for (const slot of area.slots) for (const parte of segments(seed, storage, data, slot)) {
+  if (!parte.doctor) continue;
+  const c = conta(doctorIdentity(parte.doctor));
+  c.todos[area.chave] = (c.todos[area.chave] || 0) + 1;
+  if (affiliation(parte.doctor) === 'SMS') { c.sms[area.chave] = (c.sms[area.chave] || 0) + 1; c.doctor ||= parte.doctor; }
+ }
+ const {medicos: ajustes} = lerLotacao(storage);
+ const candidatos = new Map();
+ for (const d of doctorChoices(seed, storage)) if (affiliation(d) === 'SMS') candidatos.set(doctorIdentity(d), d);
+ for (const [id, c] of cont) if (c.doctor && !candidatos.has(id)) candidatos.set(id, c.doctor);
+ for (const [id, a] of Object.entries(ajustes)) if (!candidatos.has(id) && a?.nome) candidatos.set(id, a.nome);
+ // Férias (Pendências) e afastamentos (Médicos e fixos) em andamento viram a situação sugerida.
+ const ferias = parse(storage, 'organizer', []).filter(t => t.kind === 'task' && t.type === 'Férias' && t.date <= hoje && hoje <= (t.endDate || t.date)).map(t => doctorIdentity(t.doctor));
+ const afastados = parse(storage, 'absences', []).filter(a => a.start <= hoje && hoje <= a.end).map(a => doctorIdentity(a.doctor));
+ const maior = obj => Object.entries(obj).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+ return [...candidatos].map(([id, doctor]) => {
+  const c = cont.get(id) || {sms: {}, todos: {}}, ajuste = ajustes[id];
+  const areaAuto = maior(c.sms) || maior(c.todos);
+  const situacaoAuto = ferias.includes(id) ? 'ferias' : afastados.includes(id) ? 'afastado' : 'ativo';
+  return {id, nome: nomeDe(doctor), crm: crmDe(doctor), doctor, plantoesSMS: Object.values(c.sms).reduce((s, n) => s + n, 0),
+   area: ajuste?.area || areaAuto, situacao: ajuste?.situacao || situacaoAuto, ajustado: Boolean(ajuste), areaAuto};
+ }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function resumoLotacao(lista, porSemana = PLANTOES_SEMANA) {
+ return AREAS.filter(a => AREAS_SMS.includes(a.chave)).map(a => {
+  const medicos = lista.filter(m => m.area === a.chave);
+  const toda = paraTodaEscala(a, porSemana);
+  return {...a, paraToda: toda, atual: medicos.length, faltam: Math.max(0, toda - medicos.length), medicos, afastados: medicos.filter(m => m.situacao !== 'ativo')};
+ });
 }
 
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
 const pct = v => `${Math.round(v * 100)}%`;
-const medicosTxt = n => `${n} ${n === 1 ? 'médico' : 'médicos'}`;
 
-// Texto pronto para o WhatsApp, no formato em que a Secretaria pede: só médicos SMS efetivos (sem COAPH e sem
-// extras) — quantos seriam necessários para fechar a escala inteira, quantos há hoje e quantos faltam.
-export function textoWhatsApp(dados, rotuloPeriodo, cargaPorMedico, noPeriodo = 'no mês') {
- const linhas = [`*Lotação médica SMS · UPA Sul – Pascoal Ramos*`, `${rotuloPeriodo} · só médicos SMS efetivos (sem COAPH e sem extras)`, ''];
- for (const chave of ['clinico', 'infantil', 'box']) {
-  const sms = resumoArea(dados, chave, ['SMS'], cargaPorMedico);
-  const nome = sms.nome.charAt(0) + sms.nome.slice(1).toLowerCase();
-  const faltam = Math.max(0, sms.paraTodaEscala - sms.totalMedicos);
-  linhas.push(`*${sms.nome}*`,
-   `- ${nome} para toda a escala: ${medicosTxt(sms.paraTodaEscala)}`,
-   `- ${nome} atual SMS: ${medicosTxt(sms.totalMedicos)}`,
-   faltam ? `- Faltam ${medicosTxt(faltam)} SMS para fechar a escala` : '- A escala fecha só com médicos SMS',
-   `_(${sms.necessarios} plantões de 12 h ${noPeriodo}, ${sms.porDia} por dia · hoje os SMS cobrem ${fmt(sms.plantoes)} plantões, ${pct(sms.cobertura || 0)})_`, '');
+// Texto pronto para o WhatsApp, no formato em que a Secretaria pede (só SMS efetivo; COAPH e extras não entram).
+const ROTULOS_WPP = {clinico: ['Médico clínico', 'Médico clínico'], infantil: ['Médico clínico infantil', 'Médico infantil'], box: ['Médico Box de emergência', 'Médico Box de emergência']};
+export function textoWhatsApp(lista, porSemana = PLANTOES_SEMANA, hoje = '') {
+ const linhas = ['*Lotação médica SMS · UPA Sul – Pascoal Ramos*'];
+ if (hoje) linhas.push(`Atualizado em ${hoje.split('-').reverse().join('/')}`);
+ linhas.push('');
+ const resumo = resumoLotacao(lista, porSemana);
+ for (const r of resumo) {
+  const [toda, atual] = ROTULOS_WPP[r.chave];
+  linhas.push(`${toda} para toda a escala: ${r.paraToda}`, `${atual} atual SMS: ${r.atual}`);
  }
- linhas.push(`_Cálculo: plantões ${noPeriodo} ÷ ${fmt(cargaPorMedico)} plantões de 12 h por médico SMS._`);
+ const afastados = resumo.flatMap(r => r.afastados);
+ if (afastados.length) linhas.push('', `_Inclui ${afastados.length === 1 ? 'afastado(a)' : 'afastados'}: ${afastados.map(m => `${titulo(m.nome)} (${SITUACOES.find(s => s[0] === m.situacao)[1].toLowerCase()})`).join('; ')}._`);
  return linhas.join('\n');
 }
 
@@ -125,25 +176,97 @@ export function mountLotacao(storage, seed) {
  const hoje = new Date(Date.now() - 4 * 3600000);
  let ano = hoje.getUTCFullYear(), mes = hoje.getUTCMonth() + 1, parte = 'mes', dados = null, busca = '';
  let vinculos = VINCULOS.filter(v => lerLocal(`rt-lotacao-${v}`, '1') === '1');
- let carga = Number(lerLocal('rt-lotacao-carga', '10')) || 10;
- root.innerHTML = `<div class="section-heading"><div><p class="eyebrow">LOTACIONOGRAMA · CONFORME A ESCALA</p><h2>Lotação médica da unidade</h2><p>Quantos médicos a escala pede e quantos existem hoje em cada área, por vínculo. Muda sozinho quando a escala muda.</p></div>
+ const dataHoje = hoje.toISOString().slice(0, 10);
+ let lista = [], editando = null;
+ root.innerHTML = `<div class="section-heading"><div><p class="eyebrow">LOTACIONOGRAMA</p><h2>Lotação médica da unidade</h2><p>Quantos médicos a escala pede em cada área e quantos existem hoje, por vínculo.</p></div>
   <div class="actions"><button type="button" class="lot-copiar" title="Texto só com médicos SMS efetivos, sem COAPH e sem extras">Copiar para WhatsApp · só SMS</button><button type="button" class="secondary lot-csv">Baixar planilha (CSV)</button><button type="button" class="secondary lot-imprimir">Imprimir</button></div></div>
+  <p class="lot-copiado" role="status" aria-live="polite"></p>
+  <section class="lot-sms"><div class="lot-sms-cab"><div><p class="eyebrow">O QUE A SECRETARIA PEDE</p><h2>Lotação SMS efetivo</h2><p>Só médicos SMS lotados na unidade (sem COAPH e sem extras), incluindo quem está de licença ou férias. Toque num médico para mudar a área ou a situação.</p></div>
+  <label class="lot-carga">Cada médico faz<span><input type="number" min="1" max="7" step="1" class="lot-semana-input"> plantões de 12 h por semana</span></label></div>
+  <div class="lot-sms-grade"></div><div class="lot-sms-extra"></div></section>
+  <div class="section-heading"><div><h2>Escala do período por vínculo</h2><p>Todos os médicos que estão na escala, com SMS, COAPH e extras. Muda sozinho quando a escala muda.</p></div></div>
   <div class="lot-controles"><div class="lot-periodo"><button type="button" class="secondary icone lot-ant" aria-label="Período anterior">‹</button><strong class="lot-rotulo"></strong><button type="button" class="secondary icone lot-prox" aria-label="Próximo período">›</button>
   <select class="lot-parte" aria-label="Parte do mês"><option value="mes">Mês inteiro</option><option value="1">1ª quinzena</option><option value="2">2ª quinzena</option></select></div>
   <div class="lot-filtro" role="group" aria-label="Vínculos considerados"><span>Mostrar</span>${VINCULOS.map(v => `<button type="button" class="lot-chip ${CLASSE[v]}" data-vinculo="${v}" aria-pressed="true">${v === 'SMS' ? 'SMS efetivo' : v === 'EXTRA SMS' ? 'Extra SMS' : v}</button>`).join('')}<button type="button" class="lot-so-sms secondary">Só SMS</button></div>
-  <label class="lot-carga">Carga de referência<span><input type="number" min="1" max="31" step="1" class="lot-carga-input"> plantões de 12 h por médico no mês</span></label></div>
-  <p class="lot-copiado" role="status" aria-live="polite"></p>
+</div>
   <div class="lot-cards"></div><div class="lot-cards lot-cards-menores"></div>
   <div class="section-heading lot-quadro-cab"><div><h2>Quadro de lotação</h2><p>Cada médico na área em que trabalha, separado por vínculo. A barra mostra os plantões no período.</p></div><label class="lot-busca-label">Buscar médico<input type="search" class="lot-busca" placeholder="Nome ou CRM"></label></div>
   <div class="lot-quadro"></div>
   <details class="lot-tabela-box"><summary>Tabela de todos os médicos do período</summary><div class="table-wrap"><table class="prod-table lot-tabela"></table></div></details>
   <details class="lot-sem-plantao"><summary>Médicos cadastrados sem plantão no período</summary><p class="muted lot-sem-lista"></p></details>
-  <p class="notice">Conta a escala com ajustes, dias fixos e coberturas confirmadas. Médico que faz plantão como SMS e também como extra aparece nos dois vínculos. "Para toda a escala" = plantões do período ÷ carga de referência (ajuste a carga acima; fica salva neste aparelho).</p>`;
+  <p class="notice">Conta a escala com ajustes, dias fixos e coberturas confirmadas. Médico que faz plantão como SMS e também como extra aparece nos dois vínculos. "Para toda a escala" = postos (dia + noite) × 7 dias ÷ plantões por médico na semana.</p>`;
  const $ = s => root.querySelector(s);
- $('.lot-carga-input').value = carga;
+ const porSemana = () => lerLotacao(storage).porSemana;
+ const resumos = () => AREAS.map(a => resumoArea(dados, a.chave, vinculos, porSemana()));
+ const SIT = Object.fromEntries(SITUACOES);
 
- const cargaPeriodo = () => parte === 'mes' ? carga : carga / 2;
- const resumos = () => AREAS.map(a => resumoArea(dados, a.chave, vinculos, cargaPeriodo()));
+ // ---- Lotação SMS: três áreas com "para toda a escala", "atual SMS", quem falta e a lista de médicos.
+ function linhaMedico(m) {
+  const item = el('li', `lot-sms-medico${m.situacao !== 'ativo' ? ' afastado' : ''}`);
+  const botao = el('button', 'lot-sms-nome');
+  botao.type = 'button'; botao.title = 'Mudar área ou situação';
+  botao.append(el('strong', '', titulo(m.nome)), el('small', '', `CRM-MT ${m.crm || 'a confirmar'}${m.ajustado ? ' · ajustado' : ''}`));
+  if (m.situacao !== 'ativo') botao.append(el('span', 'lot-sms-sit', SIT[m.situacao]));
+  botao.onclick = () => { editando = editando === m.id ? null : m.id; renderSMS(); };
+  item.append(botao);
+  if (editando === m.id) item.append(editor(m));
+  return item;
+ }
+ function editor(m) {
+  const box = el('div', 'lot-sms-editor');
+  const area = el('select'), sit = el('select');
+  for (const [v, t] of [['clinico', 'Clínico'], ['infantil', 'Infantil'], ['box', 'Box de emergência'], ['fora', 'Não conta na lotação SMS']]) area.add(new Option(t, v));
+  for (const [v, t] of SITUACOES) sit.add(new Option(t, v));
+  area.value = m.area || 'fora'; sit.value = m.situacao;
+  area.setAttribute('aria-label', `Área de ${m.nome}`); sit.setAttribute('aria-label', `Situação de ${m.nome}`);
+  const salvar = el('button', '', 'Salvar'), auto = el('button', 'secondary', 'Voltar ao automático');
+  salvar.type = auto.type = 'button';
+  salvar.onclick = () => { salvarLotacao(storage, d => { d.medicos[m.id] = {nome: m.nome, area: area.value, situacao: sit.value}; }); editando = null; renderSMS(); };
+  auto.onclick = () => { salvarLotacao(storage, d => { delete d.medicos[m.id]; }); editando = null; renderSMS(); };
+  auto.hidden = !m.ajustado;
+  box.append(area, sit, salvar, auto);
+  return box;
+ }
+ function renderSMS() {
+  lista = lotacaoSMS(seed, storage, dataHoje);
+  $('.lot-semana-input').value = porSemana();
+  const grade = $('.lot-sms-grade'); grade.replaceChildren();
+  for (const r of resumoLotacao(lista, porSemana())) {
+   const card = el('article', 'lot-sms-card');
+   card.append(el('h3', '', r.nome), el('p', 'muted', `${r.porDia / 2} no dia + ${r.porDia / 2} na noite × 7 dias = ${r.porDia * 7} plantões na semana ÷ ${porSemana()} por médico`));
+   const nums = el('div', 'lot-numeros');
+   const bloco = (valor, rotulo, cls) => { const b = el('div', `lot-num ${cls}`); b.append(el('strong', '', String(valor)), el('span', '', rotulo)); return b; };
+   nums.append(bloco(r.paraToda, 'para toda a escala', 'meta'), bloco(r.atual, 'atual SMS', 'atual'), bloco(r.faltam ? `−${r.faltam}` : '✓', r.faltam ? 'faltam' : 'completo', r.faltam ? 'falta' : 'ok'));
+   card.append(nums);
+   const barra = el('div', 'lot-sms-barra');
+   barra.setAttribute('role', 'img'); barra.setAttribute('aria-label', `${r.atual} de ${r.paraToda} médicos SMS`);
+   const cheio = el('span'); cheio.style.width = `${Math.min(100, r.atual / r.paraToda * 100)}%`; barra.append(cheio);
+   card.append(barra);
+   const ul = el('ul', 'lot-sms-lista');
+   for (const m of r.medicos) ul.append(linhaMedico(m));
+   if (!r.medicos.length) ul.append(el('li', 'muted', 'Nenhum médico SMS nesta área.'));
+   card.append(ul);
+   grade.append(card);
+  }
+  // Sem área (SMS do cadastro sem plantão recente), os que não contam e a opção de incluir médico.
+  const extra = $('.lot-sms-extra'); extra.replaceChildren();
+  for (const [rotulo, filtro] of [['Médicos SMS sem área definida', m => !m.area], ['Não contam na lotação SMS', m => m.area === 'fora']]) {
+   const grupo = lista.filter(filtro);
+   if (!grupo.length) continue;
+   const det = el('details', 'lot-sms-outros'); det.open = grupo.some(m => m.id === editando);
+   det.append(el('summary', '', `${rotulo} · ${grupo.length}`));
+   const ul = el('ul', 'lot-sms-lista'); for (const m of grupo) ul.append(linhaMedico(m)); det.append(ul);
+   extra.append(det);
+  }
+  const incluir = el('div', 'lot-sms-incluir'), sel = el('select');
+  sel.setAttribute('aria-label', 'Incluir médico na lotação SMS');
+  sel.add(new Option('+ Incluir médico que não aparece na lista…', ''));
+  const ids = new Set(lista.map(m => m.id));
+  for (const d of doctorChoices(seed, storage).filter(d => !ids.has(doctorIdentity(d)))) sel.add(new Option(`${titulo(nomeDe(d))} · ${affiliation(d)}`, d));
+  sel.onchange = () => { if (!sel.value) return; const d = sel.value; salvarLotacao(storage, x => { x.medicos[doctorIdentity(d)] = {nome: nomeDe(d), area: 'clinico', situacao: 'ativo'}; }); editando = doctorIdentity(d); renderSMS(); };
+  incluir.append(sel);
+  extra.append(incluir);
+ }
  function rotuloPeriodo() {
   const m = `${MESES[mes - 1]} de ${ano}`;
   return parte === 'mes' ? m.charAt(0).toUpperCase() + m.slice(1) : `${parte}ª quinzena de ${m}`;
@@ -240,11 +363,12 @@ export function mountLotacao(storage, seed) {
   $('.lot-rotulo').textContent = rotuloPeriodo();
   $('.lot-parte').value = parte;
   for (const b of root.querySelectorAll('.lot-chip')) b.setAttribute('aria-pressed', String(vinculos.includes(b.dataset.vinculo)));
+  renderSMS();
   dados = levantamento(seed, storage, datasDoPeriodo(ano, mes, parte));
-  const lista = resumos();
-  $('.lot-cards').replaceChildren(...lista.slice(0, 3).map(r => cartaoArea(r, true)));
-  $('.lot-cards-menores').replaceChildren(...lista.slice(3).map(r => cartaoArea(r, false)));
-  $('.lot-quadro').replaceChildren(...lista.map(colunaQuadro));
+  const areas = resumos();
+  $('.lot-cards').replaceChildren(...areas.slice(0, 3).map(r => cartaoArea(r, true)));
+  $('.lot-cards-menores').replaceChildren(...areas.slice(3).map(r => cartaoArea(r, false)));
+  $('.lot-quadro').replaceChildren(...areas.map(colunaQuadro));
   tabela();
   const ativos = new Set(dados.medicos.map(m => m.id));
   const sem = doctorChoices(seed, storage).filter(d => !ativos.has(doctorIdentity(d))).map(d => `${titulo(nomeDe(d))} (${affiliation(d)})`);
@@ -265,10 +389,10 @@ export function mountLotacao(storage, seed) {
   render();
  };
  $('.lot-so-sms').onclick = () => { vinculos = vinculos.length === 1 && vinculos[0] === 'SMS' ? [...VINCULOS] : ['SMS']; for (const x of VINCULOS) gravarLocal(`rt-lotacao-${x}`, vinculos.includes(x) ? '1' : '0'); render(); };
- $('.lot-carga-input').onchange = e => { carga = Math.min(31, Math.max(1, Number(e.target.value) || 10)); e.target.value = carga; gravarLocal('rt-lotacao-carga', String(carga)); render(); };
+ $('.lot-semana-input').onchange = e => { const n = Math.min(7, Math.max(1, Number(e.target.value) || 2)); salvarLotacao(storage, d => { d.porSemana = n; }); render(); };
  $('.lot-busca').oninput = e => { busca = e.target.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); $('.lot-quadro').replaceChildren(...resumos().map(colunaQuadro)); };
  $('.lot-copiar').onclick = async () => {
-  const texto = textoWhatsApp(dados, rotuloPeriodo(), cargaPeriodo(), parte === 'mes' ? 'no mês' : 'na quinzena');
+  const texto = textoWhatsApp(lotacaoSMS(seed, storage, dataHoje), porSemana(), dataHoje);
   try { await navigator.clipboard.writeText(texto); $('.lot-copiado').textContent = '✓ Copiado (só médicos SMS, sem COAPH e sem extras). Cole na conversa do WhatsApp.'; }
   catch { window.prompt('Copie o texto abaixo:', texto); }
   setTimeout(() => { $('.lot-copiado').textContent = ''; }, 5000);

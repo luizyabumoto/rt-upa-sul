@@ -67,7 +67,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|atencao|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|atencao|lotacao|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -140,6 +140,15 @@ def validate_items(items):
                     raise ApiError(400, 'Registro de troca inválido.')
                 if any(not isinstance(item[k], str) or len(item[k]) > 500 for k in ('id', 'saiu', 'entrou', 'motivo', 'criadoEm')) or len(item['motivo']) > 300:
                     raise ApiError(400, 'Registro de troca inválido.')
+        elif name == 'lotacao':
+            # Lotacionograma SMS: plantões por médico na semana e ajustes de área/situação de cada médico.
+            if not isinstance(parsed, dict) or set(parsed) - {'porSemana', 'medicos'} or not isinstance(parsed.get('medicos', {}), dict) or len(parsed.get('medicos', {})) > 1000:
+                raise ApiError(400, 'Lotação inválida.')
+            if type(parsed.get('porSemana', 2)) is not int or not 1 <= parsed.get('porSemana', 2) <= 7:
+                raise ApiError(400, 'Plantões por semana inválidos.')
+            for chave, item in parsed.get('medicos', {}).items():
+                if len(chave) > 200 or not isinstance(item, dict) or set(item) != {'nome', 'area', 'situacao'} or not isinstance(item['nome'], str) or len(item['nome']) > 500                         or item['area'] not in ('clinico', 'infantil', 'box', 'fora') or item['situacao'] not in ('ativo', 'licenca-maternidade', 'licenca', 'ferias', 'afastado'):
+                    raise ApiError(400, 'Lotação de médico inválida.')
         elif name == 'atencao':
             # Médicos que merecem atenção (Painel): quando entrou, saiu e as datas das conversas do RT.
             if not isinstance(parsed, dict) or len(parsed) > 500:

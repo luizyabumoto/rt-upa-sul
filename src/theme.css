@@ -525,3 +525,35 @@ label.excluir-item{display:flex!important;align-items:center;gap:8px;font-size:1
  body.imprimindo-lotacao .lot-quadro{grid-template-columns:repeat(5,minmax(0,1fr))}
  body.imprimindo-lotacao .lot-card,body.imprimindo-lotacao .lot-coluna{break-inside:avoid}
 }
+
+/* Lotação SMS efetivo (o que a Secretaria pede) */
+.lot-sms{background:linear-gradient(135deg,rgba(44,201,180,.07),rgba(76,141,234,.04));border:1px solid var(--accent-line);border-radius:16px;padding:18px 20px;margin-bottom:10px}
+.lot-sms-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.lot-sms-cab h2{margin:4px 0;font-size:20px}
+.lot-sms-cab p:last-child{margin:0;max-width:720px;color:var(--text-2)}
+.lot-sms-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lot-sms-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lot-sms-card h3{margin:0;font-size:16px}
+.lot-sms-card>p{margin:0;font-size:12px}
+.lot-sms-barra{height:10px;border-radius:5px;background:var(--danger-soft);border:1px solid var(--danger-line);overflow:hidden}
+.lot-sms-barra span{display:block;height:100%;background:var(--accent);border-radius:5px 0 0 5px}
+.lot-sms-lista{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.lot-sms-medico{display:grid;gap:6px}
+.lotacao button.lot-sms-nome{box-sizing:border-box;display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 8px;width:100%;padding:6px 10px;text-align:left;font-weight:400;border-radius:9px!important;background:var(--surface-2)!important;color:var(--text)!important;border:1px solid transparent!important;box-shadow:none!important;cursor:pointer}
+.lotacao button.lot-sms-nome:hover{border-color:var(--line-3)!important;filter:none}
+.lotacao .lot-sms-medico.afastado button.lot-sms-nome{background:var(--warn-soft)!important;border-color:var(--warn-line)!important}
+.lotacao button.lot-sms-nome:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lot-sms-nome strong{font-size:13px;grid-column:1}
+.lot-sms-nome small{font-size:11px;color:var(--text-3);grid-column:1}
+.lot-sms-sit{grid-column:2;grid-row:1/3;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--warn-soft);border:1px solid var(--warn-line);color:var(--warn-text)}
+.lot-sms-editor{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border-radius:9px;background:var(--surface-3);border:1px solid var(--line-2)}
+.lot-sms-editor select{flex:1 1 150px;min-width:0;padding:6px 8px;font-size:12.5px}
+.lot-sms-editor button{padding:6px 12px;font-size:12.5px}
+.lot-sms-extra{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-top:12px}
+.lot-sms-outros{flex:1 1 320px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.lot-sms-outros summary{cursor:pointer;font-weight:650;color:var(--accent-text);font-size:13px}
+.lot-sms-outros .lot-sms-lista{margin-top:8px}
+.lot-sms-incluir{flex:1 1 320px}
+.lot-sms-incluir select{width:100%}
+@media(max-width:900px){.lot-sms-grade{grid-template-columns:1fr}}
+@media(max-width:650px){.lot-sms{padding:14px}}
