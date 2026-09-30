@@ -15,7 +15,7 @@ from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, co
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js'}
+ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None

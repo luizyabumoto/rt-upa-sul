@@ -430,3 +430,98 @@ label.excluir-item{display:flex!important;align-items:center;gap:8px;font-size:1
  .atc .atc-cab{flex-direction:column}
  .atc-grade{grid-template-columns:1fr}
 }
+
+/* ============================================================================================
+   Lotação (lotacionograma): números por área, filtro de vínculo e quadro de médicos
+   ============================================================================================ */
+.lotacao{--v-sms:#c9d4e3;--v-coaph:#7aa6ff;--v-extra:#56d68f;--v-vago:#f07575}
+.lotacao .section-heading .actions{flex-wrap:wrap;justify-content:flex-end}
+.lot-controles{display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin-bottom:6px}
+.lot-periodo{display:flex;align-items:center;gap:8px}
+.lot-periodo strong{min-width:190px;text-align:center;font-size:15px}
+.lot-periodo select{width:auto}
+.lot-filtro{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.lot-filtro>span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-weight:700;margin-right:2px}
+.lotacao button.lot-chip{background:var(--surface-2)!important;color:var(--text-3)!important;border:1px dashed var(--line-3)!important;box-shadow:none!important;border-radius:999px!important;padding:6px 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:7px}
+.lotacao button.lot-chip::before{content:'';width:9px;height:9px;border-radius:50%;background:var(--line-3)}
+.lotacao button.lot-chip[aria-pressed=true]{color:var(--text)!important;border-style:solid!important;background:var(--surface-3)!important}
+.lotacao button.lot-chip.sms[aria-pressed=true]::before{background:var(--v-sms)}
+.lotacao button.lot-chip.coaph[aria-pressed=true]::before{background:var(--v-coaph)}
+.lotacao button.lot-chip.extra[aria-pressed=true]::before{background:var(--v-extra)}
+.lotacao button.lot-so-sms{padding:6px 12px;font-size:12.5px;border-radius:999px!important}
+.lot-carga{display:flex!important;flex-direction:column;gap:4px;margin-left:auto}
+.lot-carga span{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--text-2);font-size:12.5px;letter-spacing:0;text-transform:none}
+.lot-carga input{width:64px!important;min-width:0!important;padding:6px 8px}
+.lot-copiado{min-height:20px;margin:4px 2px 8px;color:#a6ecc4;font-weight:650;font-size:13px}
+
+.lot-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.lot-cards-menores{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lot-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.lot-card.menor{padding:14px 16px}
+.lot-card-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.lot-card-cab h3{margin:0;font-size:16px}
+.lot-card-cab span{font-size:12px}
+.lot-numeros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lot-num{display:grid;gap:2px;padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line-2)}
+.lot-num strong{font-size:30px;line-height:1;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.lot-num span{font-size:11px;color:var(--text-3);font-weight:650;letter-spacing:.02em}
+.lot-num.meta strong{color:var(--text)}
+.lot-num.atual{border-color:var(--accent-line);background:var(--accent-soft)}.lot-num.atual strong{color:var(--accent-text)}
+.lot-num.falta{border-color:var(--danger-line);background:var(--danger-soft)}.lot-num.falta strong{color:var(--danger-text)}
+.lot-num.ok strong{color:#a6ecc4}
+.lot-card.menor .lot-num strong{font-size:24px}
+.lot-barra{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden;background:var(--surface-3)}
+.lot-barra span{min-width:0}
+.lot-barra .sms,.lot-legenda i.sms,.lot-grupo.sms h4::before{background:var(--v-sms)}
+.lot-barra .coaph,.lot-legenda i.coaph,.lot-grupo.coaph h4::before{background:var(--v-coaph)}
+.lot-barra .extra,.lot-legenda i.extra,.lot-grupo.extra h4::before{background:var(--v-extra)}
+.lot-barra .vago,.lot-legenda i.vago{background:repeating-linear-gradient(135deg,var(--v-vago) 0 4px,transparent 4px 7px)}
+.lot-barra .apagado{opacity:.22}
+.lot-legenda{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lot-legenda li{display:grid;grid-template-columns:12px 1fr auto 64px;align-items:center;gap:8px;font-size:13px;color:var(--text-2)}
+.lot-legenda li.apagado{opacity:.4}
+.lot-legenda i{width:10px;height:10px;border-radius:3px}
+.lot-legenda strong{color:var(--text);font-variant-numeric:tabular-nums}
+.lot-legenda small{color:var(--text-3);text-align:right;font-variant-numeric:tabular-nums}
+.lot-legenda li.vago strong{color:var(--danger-text)}
+.lot-rodape{margin:0;font-size:12px;color:var(--text-3)}
+
+.lot-quadro-cab{align-items:flex-end!important}
+.lot-busca-label{min-width:240px}
+.lot-quadro{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.lot-coluna{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
+.lot-coluna header{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 8px;border-bottom:1px solid var(--line-2)}
+.lot-coluna h3{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase}
+.lot-coluna-num{font-weight:800;font-size:18px;color:var(--accent-text);font-variant-numeric:tabular-nums}
+.lot-grupo{display:grid;gap:4px}
+.lot-grupo h4{display:flex;align-items:center;gap:7px;margin:0 0 2px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
+.lot-grupo h4::before{content:'';width:9px;height:9px;border-radius:3px}
+.lot-medico{position:relative;display:flex;align-items:center;gap:8px;padding:6px 8px 8px;border-radius:9px;background:var(--surface-2);border:1px solid transparent;overflow:hidden}
+.lot-medico-txt{display:grid;min-width:0;flex:1}
+.lot-medico-txt strong{font-size:12.5px;line-height:1.3;overflow-wrap:anywhere}
+.lot-medico-txt small{font-size:11px;color:var(--text-3)}
+.lot-medico-n{font-weight:800;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text-2)}
+.lot-medico-barra{position:absolute;left:0;bottom:0;height:3px;border-radius:0 2px 2px 0}
+.lot-grupo.sms .lot-medico-barra{background:var(--v-sms)}.lot-grupo.coaph .lot-medico-barra{background:var(--v-coaph)}.lot-grupo.extra .lot-medico-barra{background:var(--v-extra)}
+.lot-medico.achado{border-color:var(--accent);background:var(--accent-soft)}
+.lot-medico.fora{opacity:.3}
+.lot-tabela-box,.lot-sem-plantao{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px}
+.lot-tabela-box summary,.lot-sem-plantao summary{cursor:pointer;font-weight:650;color:var(--accent-text)}
+.lot-tabela-box .table-wrap{margin-top:10px;max-height:520px}
+.lot-sem-lista{line-height:1.8;margin:10px 0 0}
+
+@media(max-width:1100px){.lot-quadro{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.lot-cards{grid-template-columns:1fr}.lot-cards-menores{grid-template-columns:1fr}.lot-carga{margin-left:0}}
+@media(max-width:650px){.lot-quadro{grid-template-columns:1fr}.lot-periodo strong{min-width:0;flex:1}.lot-periodo{width:100%;flex-wrap:wrap}.lot-periodo select{flex-basis:100%}.lot-num strong{font-size:24px}.lot-busca-label{min-width:0;width:100%}}
+
+/* Impressão só da Lotação, em fundo branco */
+@media print{
+ body.imprimindo-lotacao{background:#fff!important;color:#111!important}
+ body.imprimindo-lotacao header,body.imprimindo-lotacao .workspace-nav,body.imprimindo-lotacao .account-bar,body.imprimindo-lotacao #schedule-panel,body.imprimindo-lotacao #organizer>section:not(#lotacao-panel),body.imprimindo-lotacao .lotacao .actions,body.imprimindo-lotacao .lot-controles button,body.imprimindo-lotacao .lot-controles select,body.imprimindo-lotacao .lot-carga,body.imprimindo-lotacao .lot-busca-label,body.imprimindo-lotacao .lot-sem-plantao,body.imprimindo-lotacao main>.notice{display:none!important}
+ body.imprimindo-lotacao #lotacao-panel{display:block!important}
+ body.imprimindo-lotacao #lotacao-panel *{color:#111!important;box-shadow:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ body.imprimindo-lotacao .lot-card,body.imprimindo-lotacao .lot-coluna,body.imprimindo-lotacao .lot-controles,body.imprimindo-lotacao .lot-num,body.imprimindo-lotacao .lot-medico{background:#fff!important;border-color:#ccc!important}
+ body.imprimindo-lotacao .lotacao{--v-sms:#8a9bb3}
+ body.imprimindo-lotacao .lot-quadro{grid-template-columns:repeat(5,minmax(0,1fr))}
+ body.imprimindo-lotacao .lot-card,body.imprimindo-lotacao .lot-coluna{break-inside:avoid}
+}
