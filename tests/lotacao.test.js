@@ -38,12 +38,15 @@ test('para toda a escala = plantões do período ÷ carga de referência (só na
  assert.equal(resumoArea(dados, 'visita', undefined, 10).paraTodaEscala, null);
 });
 
-test('texto do WhatsApp responde no formato pedido pela Secretaria', () => {
+test('texto do WhatsApp: só médicos SMS, quantos fecham a escala, quantos há e quantos faltam', () => {
  const dados = levantamento(seed, new MemoryStore(), datasDoPeriodo(2026, 10, '1'));
  const texto = textoWhatsApp(dados, '1ª quinzena de outubro de 2026', 5, 'na quinzena');
- assert.match(texto, /Médico clínico para toda a escala: 24 médicos \(120 plantões de 12 h na quinzena/);
- assert.match(texto, /Médico clínico atual SMS: \d+ médicos?/);
+ const sms = resumoArea(dados, 'clinico', ['SMS'], 5);
+ assert.match(texto, /Médico clínico para toda a escala: 24 médicos\n/);
+ assert.match(texto, new RegExp(`Médico clínico atual SMS: ${sms.totalMedicos} médicos?\n`));
+ assert.match(texto, new RegExp(`Faltam ${24 - sms.totalMedicos} médicos? SMS para fechar a escala`));
  assert.match(texto, /Médico infantil atual SMS/);
  assert.match(texto, /Box de emergência atual SMS/);
+ assert.doesNotMatch(texto, /COAPH \d|Extra SMS \d/);
  assert.match(csvLotacao(dados, ['SMS']), /CRM-MT/);
 });

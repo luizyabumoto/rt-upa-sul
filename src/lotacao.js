@@ -79,18 +79,21 @@ const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ','
 const pct = v => `${Math.round(v * 100)}%`;
 const medicosTxt = n => `${n} ${n === 1 ? 'médico' : 'médicos'}`;
 
-// Texto pronto para o WhatsApp, no formato em que a Secretaria costuma pedir.
+// Texto pronto para o WhatsApp, no formato em que a Secretaria pede: só médicos SMS efetivos (sem COAPH e sem
+// extras) — quantos seriam necessários para fechar a escala inteira, quantos há hoje e quantos faltam.
 export function textoWhatsApp(dados, rotuloPeriodo, cargaPorMedico, noPeriodo = 'no mês') {
- const linhas = [`*Lotação médica · UPA Sul – Pascoal Ramos*`, `${rotuloPeriodo} · conforme a escala`, ''];
+ const linhas = [`*Lotação médica SMS · UPA Sul – Pascoal Ramos*`, `${rotuloPeriodo} · só médicos SMS efetivos (sem COAPH e sem extras)`, ''];
  for (const chave of ['clinico', 'infantil', 'box']) {
-  const todos = resumoArea(dados, chave, VINCULOS, cargaPorMedico), sms = resumoArea(dados, chave, ['SMS'], cargaPorMedico);
-  const nome = todos.nome.replace('Médico ', 'médico ');
-  linhas.push(`*${todos.nome}*`,
-   `- ${nome.charAt(0).toUpperCase() + nome.slice(1)} para toda a escala: ${medicosTxt(todos.paraTodaEscala)} (${todos.necessarios} plantões de 12 h ${noPeriodo} · ${todos.porDia} por dia · ${fmt(cargaPorMedico)} plantões por médico)`,
-   `- ${nome.charAt(0).toUpperCase() + nome.slice(1)} atual SMS: ${medicosTxt(sms.totalMedicos)} (cobrem ${fmt(sms.plantoes)} plantões · ${pct(sms.cobertura || 0)} da escala)`,
-   `- Hoje na escala: ${medicosTxt(todos.totalMedicos)} · SMS ${todos.porVinculo.SMS.medicos} · COAPH ${todos.porVinculo.COAPH.medicos} · Extra SMS ${todos.porVinculo['EXTRA SMS'].medicos}${todos.vagos ? ` · ${todos.vagos} plantões vagos` : ''}`, '');
+  const sms = resumoArea(dados, chave, ['SMS'], cargaPorMedico);
+  const nome = sms.nome.charAt(0) + sms.nome.slice(1).toLowerCase();
+  const faltam = Math.max(0, sms.paraTodaEscala - sms.totalMedicos);
+  linhas.push(`*${sms.nome}*`,
+   `- ${nome} para toda a escala: ${medicosTxt(sms.paraTodaEscala)}`,
+   `- ${nome} atual SMS: ${medicosTxt(sms.totalMedicos)}`,
+   faltam ? `- Faltam ${medicosTxt(faltam)} SMS para fechar a escala` : '- A escala fecha só com médicos SMS',
+   `_(${sms.necessarios} plantões de 12 h ${noPeriodo}, ${sms.porDia} por dia · hoje os SMS cobrem ${fmt(sms.plantoes)} plantões, ${pct(sms.cobertura || 0)})_`, '');
  }
- linhas.push('_Médico que faz plantão como SMS e como extra conta nos dois vínculos._');
+ linhas.push(`_Cálculo: plantões ${noPeriodo} ÷ ${fmt(cargaPorMedico)} plantões de 12 h por médico SMS._`);
  return linhas.join('\n');
 }
 
@@ -124,7 +127,7 @@ export function mountLotacao(storage, seed) {
  let vinculos = VINCULOS.filter(v => lerLocal(`rt-lotacao-${v}`, '1') === '1');
  let carga = Number(lerLocal('rt-lotacao-carga', '10')) || 10;
  root.innerHTML = `<div class="section-heading"><div><p class="eyebrow">LOTACIONOGRAMA · CONFORME A ESCALA</p><h2>Lotação médica da unidade</h2><p>Quantos médicos a escala pede e quantos existem hoje em cada área, por vínculo. Muda sozinho quando a escala muda.</p></div>
-  <div class="actions"><button type="button" class="lot-copiar">Copiar para WhatsApp</button><button type="button" class="secondary lot-csv">Baixar planilha (CSV)</button><button type="button" class="secondary lot-imprimir">Imprimir</button></div></div>
+  <div class="actions"><button type="button" class="lot-copiar" title="Texto só com médicos SMS efetivos, sem COAPH e sem extras">Copiar para WhatsApp · só SMS</button><button type="button" class="secondary lot-csv">Baixar planilha (CSV)</button><button type="button" class="secondary lot-imprimir">Imprimir</button></div></div>
   <div class="lot-controles"><div class="lot-periodo"><button type="button" class="secondary icone lot-ant" aria-label="Período anterior">‹</button><strong class="lot-rotulo"></strong><button type="button" class="secondary icone lot-prox" aria-label="Próximo período">›</button>
   <select class="lot-parte" aria-label="Parte do mês"><option value="mes">Mês inteiro</option><option value="1">1ª quinzena</option><option value="2">2ª quinzena</option></select></div>
   <div class="lot-filtro" role="group" aria-label="Vínculos considerados"><span>Mostrar</span>${VINCULOS.map(v => `<button type="button" class="lot-chip ${CLASSE[v]}" data-vinculo="${v}" aria-pressed="true">${v === 'SMS' ? 'SMS efetivo' : v === 'EXTRA SMS' ? 'Extra SMS' : v}</button>`).join('')}<button type="button" class="lot-so-sms secondary">Só SMS</button></div>
@@ -266,7 +269,7 @@ export function mountLotacao(storage, seed) {
  $('.lot-busca').oninput = e => { busca = e.target.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); $('.lot-quadro').replaceChildren(...resumos().map(colunaQuadro)); };
  $('.lot-copiar').onclick = async () => {
   const texto = textoWhatsApp(dados, rotuloPeriodo(), cargaPeriodo(), parte === 'mes' ? 'no mês' : 'na quinzena');
-  try { await navigator.clipboard.writeText(texto); $('.lot-copiado').textContent = '✓ Copiado. Cole na conversa do WhatsApp.'; }
+  try { await navigator.clipboard.writeText(texto); $('.lot-copiado').textContent = '✓ Copiado (só médicos SMS, sem COAPH e sem extras). Cole na conversa do WhatsApp.'; }
   catch { window.prompt('Copie o texto abaixo:', texto); }
   setTimeout(() => { $('.lot-copiado').textContent = ''; }, 5000);
  };
