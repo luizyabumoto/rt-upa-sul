@@ -5,6 +5,7 @@ import {parse, periodKey, baseDoctor, segments, doctorChoices, affiliation, MISS
 import {plantaoAtual, mesmoMedico} from './production.js';
 import {registrarTroca} from './historico.js';
 import {completarCrms} from './cadastro.js';
+import {lerProducao} from './resumo.js';
 
 export const MINIMO_CONSULTAS = 5;          // troca automática: quem entrou atendeu pelo menos isso no plantão
 export const MINIMO_SUGESTAO = 3;           // abaixo disso nem sugere (pode ser só uma ajuda pontual)
@@ -205,9 +206,9 @@ export function mountTrocas(storage, seed) {
   let mudou = false;
   for (const plantao of plantoesParaVerificar()) {
    try {
-    const r = await fetch(`/api/producao?inicio=${encodeURIComponent(plantao.inicio)}&fim=${encodeURIComponent(plantao.fim)}`, {cache: 'no-store'});
-    const dados = await r.json();
-    if (!r.ok || !dados.disponivel) continue;
+    // Mesma leitura compartilhada do Painel: o plantão atual não é pedido duas vezes ao Gestor Saúde.
+    const dados = await lerProducao(plantao.inicio, plantao.fim);
+    if (!dados.disponivel) continue;
     const registros = dados.registros.filter(x => x.data === plantao.data && x.turno === plantao.turno);
     const resultado = aplicarTrocas(seed, storage, plantao, registros);
     mudou ||= resultado.mudou;

@@ -18,6 +18,7 @@ import os
 import threading
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -390,8 +391,27 @@ class GestorSaude:
     def producao(self, inicio, fim, chaves=None):
         """Atendimentos do relatório Produção Analítico (formato 2 = dados), só médico, horário e classificação.
         O Gestor Saúde aceita no máximo 31 dias por consulta; períodos maiores são lidos em partes."""
+        def baixar(tarefa):
+            chave, tipo, cbo, parte, ate = tarefa
+            resposta = self._chamar('api/PacienteAtendimento/ImprimirProducaoAnalitico', {
+                'atendimentoTipoId': tipo, 'cboId': cbo, 'profissionalId': 0, 'formato': 2,
+                'competenciaInicial': parte.strftime('%Y-%m-%d %H:%M'), 'competenciaFinal': ate.strftime('%Y-%m-%d %H:%M')}, token=self.token) or {}
+            saida = []
+            for atendimento in resposta.get('atendimentos') or []:
+                if not self.campos_relatorio:
+                    self.campos_relatorio = sorted(atendimento)   # só os nomes dos campos, para diagnóstico
+                momento = _horario(atendimento.get('dataAtendimento'))
+                # Descarta aqui os dados do paciente; o limite evita contar duas vezes na emenda das partes.
+                crm = crm_do_atendimento(atendimento)
+                if crm and atendimento.get('profissional'):
+                    self.crms[atendimento['profissional'].strip()] = crm
+                if momento and parte <= momento < ate + timedelta(minutes=1) and (momento < fim + timedelta(minutes=1)):
+                    saida.append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento,
+                                  atendimento.get('classificacaoDescricao'), _chegada_relatorio(atendimento)))
+            return chave, saida
+
         def ler():
-            linhas = {}
+            linhas, tarefas = {}, []
             for chave, (tipo, cbo) in self._tipos_producao().items():
                 if chaves and chave not in chaves:
                     continue
@@ -399,21 +419,12 @@ class GestorSaude:
                 parte = inicio
                 while parte < fim:
                     ate = min(parte + timedelta(days=30), fim)
-                    resposta = self._chamar('api/PacienteAtendimento/ImprimirProducaoAnalitico', {
-                        'atendimentoTipoId': tipo, 'cboId': cbo, 'profissionalId': 0, 'formato': 2,
-                        'competenciaInicial': parte.strftime('%Y-%m-%d %H:%M'), 'competenciaFinal': ate.strftime('%Y-%m-%d %H:%M')}, token=self.token) or {}
-                    for atendimento in resposta.get('atendimentos') or []:
-                        if not self.campos_relatorio:
-                            self.campos_relatorio = sorted(atendimento)   # só os nomes dos campos, para diagnóstico
-                        momento = _horario(atendimento.get('dataAtendimento'))
-                        # Descarta aqui os dados do paciente; o limite evita contar duas vezes na emenda das partes.
-                        crm = crm_do_atendimento(atendimento)
-                        if crm and atendimento.get('profissional'):
-                            self.crms[atendimento['profissional'].strip()] = crm
-                        if momento and parte <= momento < ate + timedelta(minutes=1) and (momento < fim + timedelta(minutes=1)):
-                            linhas[chave].append(((atendimento.get('profissional') or 'SEM PROFISSIONAL').strip(), momento,
-                                                  atendimento.get('classificacaoDescricao'), _chegada_relatorio(atendimento)))
+                    tarefas.append((chave, tipo, cbo, parte, ate))
                     parte = ate + timedelta(minutes=1) if ate < fim else fim
+            # Cada relatório leva alguns segundos no Gestor Saúde: pede até 4 ao mesmo tempo, na ordem original.
+            with ThreadPoolExecutor(max_workers=max(1, min(4, len(tarefas)))) as executor:
+                for chave, saida in executor.map(baixar, tarefas):
+                    linhas[chave].extend(saida)
             return linhas
         return self._com_token(ler)
 
@@ -457,6 +468,28 @@ class PainelFluxo:
             return {**base, 'dados': self.ultimo}
 
 
+def _do_cache(painel, chave, recheck=False):
+    """Sem recheck: (resultado, None) se o cache vale, senão (guardado ou None, trava do período).
+    Com recheck (já dentro da trava do período): (resultado guardado ou None, se ainda vale)."""
+    with painel.trava:
+        guardado = painel.cache.get(chave)
+        valido = bool(guardado) and painel.relogio() < guardado[0]
+        if recheck:
+            return (guardado[1] if guardado else None), valido
+        if valido:
+            return guardado[1], None
+        return (guardado[1] if guardado else None), painel.travas.setdefault(chave, threading.Lock())
+
+
+def _guardar(painel, chave, resultado, validade, limite):
+    with painel.trava:
+        if len(painel.cache) > limite:
+            painel.cache.clear()
+        if len(painel.travas) > 2 * limite:
+            painel.travas.clear()
+        painel.cache[chave] = (painel.relogio() + validade, resultado)
+
+
 class PainelProducao:
     """Produção por período. Plantão em andamento: releitura a cada 2 min; períodos encerrados: 6 h de cache."""
     LIMITE_DIAS = 93
@@ -464,7 +497,7 @@ class PainelProducao:
     def __init__(self, cliente=None, relogio=time.time):
         self.cliente = cliente or cliente_compartilhado()
         self.relogio = relogio
-        self.cache = {}
+        self.cache, self.travas = {}, {}
         self.trava = threading.Lock()
 
     def obter(self, inicio, fim=None):
@@ -476,10 +509,14 @@ class PainelProducao:
             raise ValueError(f'Escolha um período de até {self.LIMITE_DIAS} dias.')
         aberto = agora - fim < timedelta(minutes=5)
         chave = (inicio.isoformat(), 'agora' if aberto else fim.isoformat())
-        with self.trava:
-            guardado = self.cache.get(chave)
-            if guardado and self.relogio() < guardado[0]:
-                return guardado[1]
+        guardado, trava_periodo = _do_cache(self, chave)
+        if trava_periodo is None:
+            return guardado
+        # Só pedidos do mesmo período esperam um pelo outro; períodos diferentes são lidos ao mesmo tempo.
+        with trava_periodo:
+            guardado, valido = _do_cache(self, chave, recheck=True)
+            if valido:
+                return guardado
             try:
                 resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
                              'atualizadoEm': datetime.fromtimestamp(self.relogio(), timezone.utc).isoformat(),
@@ -489,11 +526,9 @@ class PainelProducao:
                              'crmProfissionais': dict(getattr(self.cliente, 'crms', {}))}
             except GestorSaudeError as erro:
                 if guardado:
-                    return {**guardado[1], 'disponivel': False, 'erro': str(erro)}
+                    return {**guardado, 'disponivel': False, 'erro': str(erro)}
                 return {'disponivel': False, 'erro': str(erro), 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto, 'atualizadoEm': None, 'registros': []}
-            if len(self.cache) > 40:
-                self.cache.clear()
-            self.cache[chave] = (self.relogio() + (120 if aberto else 6 * 3600), resultado)
+            _guardar(self, chave, resultado, 120 if aberto else 6 * 3600, 40)
             return resultado
 
 
@@ -520,7 +555,7 @@ class PainelDemanda:
     def __init__(self, cliente=None, relogio=time.time):
         self.cliente = cliente or cliente_compartilhado()
         self.relogio = relogio
-        self.cache = {}
+        self.cache, self.travas = {}, {}
         self.trava = threading.Lock()
 
     def obter(self, inicio, fim=None):
@@ -532,16 +567,17 @@ class PainelDemanda:
             raise ValueError(f'Peça no máximo {self.LIMITE_DIAS} dias por vez.')
         aberto = agora - fim < timedelta(minutes=5)
         chave = (inicio.isoformat(), 'agora' if aberto else fim.isoformat())
-        with self.trava:
-            guardado = self.cache.get(chave)
-            if guardado and self.relogio() < guardado[0]:
-                return guardado[1]
+        guardado, trava_periodo = _do_cache(self, chave)
+        if trava_periodo is None:
+            return guardado
+        with trava_periodo:
+            guardado, valido = _do_cache(self, chave, recheck=True)
+            if valido:
+                return guardado
             try:
                 resultado = {'disponivel': True, 'erro': None, 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto,
                              'horas': resumir_demanda(self.cliente.producao(inicio, fim, chaves=('adulto', 'pediatria')))}
             except GestorSaudeError as erro:
                 return {'disponivel': False, 'erro': str(erro), 'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'emAndamento': aberto, 'horas': {}}
-            if len(self.cache) > 60:
-                self.cache.clear()
-            self.cache[chave] = (self.relogio() + (300 if aberto else 6 * 3600), resultado)
+            _guardar(self, chave, resultado, 300 if aberto else 6 * 3600, 60)
             return resultado

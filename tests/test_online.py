@@ -7,11 +7,17 @@ from zipfile import ZipFile
 import online
 
 
-def request(path, method='GET', data=None, token=None, origin='http://127.0.0.1:8001'):
+def request(path, method='GET', data=None, token=None, origin='http://127.0.0.1:8001', query='', etag=None, lembrar=False, desde_data=None):
+    if not lembrar:
+        online._SESSOES.clear()   # cada pedido confere a sessão de novo, salvo quando o teste é sobre lembrar
     body = json.dumps(data).encode() if data is not None else b''
     env = {'PATH_INFO': path, 'REQUEST_METHOD': method, 'CONTENT_TYPE': 'application/json',
            'CONTENT_LENGTH': str(len(body)), 'wsgi.input': io.BytesIO(body), 'HTTP_ORIGIN': origin,
-           'HTTP_COOKIE': f'rt_session={token}' if token else ''}
+           'HTTP_COOKIE': f'rt_session={token}' if token else '', 'QUERY_STRING': query}
+    if etag:
+        env['HTTP_IF_NONE_MATCH'] = etag
+    if desde_data:
+        env['HTTP_IF_MODIFIED_SINCE'] = desde_data
     result = {}
     def start(status, headers):
         result.update(status=int(status[:3]), headers=headers)
@@ -81,6 +87,32 @@ class OnlineTests(unittest.TestCase):
             return [] if 'rt_members' in path else provider(path, **kwargs)
         with patch('online.remote', side_effect=no_member):
             self.assertEqual(request('/api/state', token='test-token')['status'], 403)
+
+    def test_sessao_conferida_fica_lembrada_e_sai_no_logout(self):
+        online._SESSOES.clear()
+        with patch('online.remote', side_effect=provider) as remoto:
+            request('/api/session', token='test-token', lembrar=True)
+            request('/src/app.js', token='test-token', lembrar=True)
+            self.assertEqual([c.args[0] for c in remoto.call_args_list].count('/auth/v1/user'), 1, 'não pode conferir a sessão a cada arquivo')
+            request('/api/logout', 'POST', {}, 'test-token', lembrar=True)
+            self.assertEqual(online._SESSOES, {})
+
+    def test_arquivo_sem_mudanca_responde_304(self):
+        primeiro = request('/src/app.js', token='test-token')
+        etag = dict(primeiro['headers'])['ETag']
+        self.assertEqual(dict(primeiro['headers'])['Cache-Control'], 'private, no-cache')
+        de_novo = request('/src/app.js', token='test-token', etag=etag)
+        self.assertEqual((de_novo['status'], de_novo['body']), (304, b''))
+        self.assertEqual(request('/src/app.js', etag=etag)['status'], 401, '304 só depois do login')
+        # O Edge revalida pela data: a mesma data volta 304; qualquer outra data recebe o arquivo.
+        data = dict(primeiro['headers'])['Last-Modified']
+        self.assertEqual(request('/src/app.js', token='test-token', desde_data=data)['status'], 304)
+        self.assertEqual(request('/src/app.js', token='test-token', desde_data='Mon, 01 Jan 2035 00:00:00 GMT')['status'], 200)
+        self.assertNotEqual(data, dict(request('/src/flow.js', token='test-token')['headers'])['Last-Modified'], 'a data vem do conteúdo')
+
+    def test_sincronizacao_so_baixa_quando_muda(self):
+        self.assertEqual(json.loads(request('/api/state', token='test-token', query='desde=1')['body']), {'revision': 1, 'inalterado': True})
+        self.assertIn('items', json.loads(request('/api/state', token='test-token', query='desde=0')['body']))
 
     def test_server_source_and_template_never_downloadable(self):
         for path in ['/online.py', '/.env', '/templates/escala-medica-oficial.xlsx', '/src/../online.py']:

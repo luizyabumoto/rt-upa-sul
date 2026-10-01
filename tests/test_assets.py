@@ -23,6 +23,19 @@ class AssetsTest(unittest.TestCase):
                 fila.append(f'/src/{alvo}')
         self.assertEqual(faltando, [])
 
+    def test_pagina_pre_carrega_todos_os_modulos(self):
+        # Sem o modulepreload, o navegador só descobre cada import depois de baixar o anterior (cascata lenta).
+        importados, fila = set(), ['app.js']
+        while fila:
+            nome = fila.pop()
+            if nome in importados:
+                continue
+            importados.add(nome)
+            fila += re.findall(r"""from\s+['"]\./([\w-]+\.js)['"]""", (ROOT / 'src' / nome).read_text(encoding='utf-8'))
+        html = (ROOT / 'index.html').read_text(encoding='utf-8')
+        pre = set(re.findall(r'<link rel="modulepreload" href="/src/([\w-]+\.js)">', html))
+        self.assertEqual(sorted(importados - pre), [], 'módulo novo: inclua o modulepreload no index.html')
+
 
 if __name__ == '__main__':
     unittest.main()

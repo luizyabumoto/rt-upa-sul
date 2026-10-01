@@ -65,7 +65,7 @@ export function mountAtencao(storage, seed) {
  const host = document.querySelector('#overview-panel [data-slot="atencao"]');
  if (!host) return;
  host.className = 'atc';
- let hist = null, histDe = '', agora = null, carregando = false, erro = '';
+ let hist = null, histRegistros = null, histDe = '', agora = null, carregando = false, erro = '';
 
  function cartao(a, hoje) {
   const card = el('article', `atc-card ${a.situacao}${a.abaixoHoje && a.situacao !== 'atencao' ? ' hoje-baixo' : ''}`);
@@ -175,18 +175,23 @@ export function mountAtencao(storage, seed) {
   carregando = true;
   const p = plantaoAtual();
   try {
-   if (histDe !== p.inicio) {
-    const d = await lerProducao(menosDias(p.inicio, JANELA_DIAS), p.inicio);
-    if (d.disponivel || d.registros?.length) { hist = historico(d.registros || [], (data, turno) => escaladosComArea(seed, storage, data, turno)); histDe = p.inicio; erro = ''; }
+   // Histórico e plantão atual pedidos ao mesmo tempo (antes um esperava o outro).
+   const pedidoHist = histDe !== p.inicio ? lerProducao(menosDias(p.inicio, JANELA_DIAS), p.inicio) : null;
+   const pedidoAtual = lerProducao(p.inicio, 'agora');
+   if (pedidoHist) {
+    const d = await pedidoHist;
+    if (d.disponivel || d.registros?.length) { histRegistros = d.registros || []; recalcular(); histDe = p.inicio; erro = ''; }
     else erro = d.erro || 'falha na leitura';
    }
-   const atual = await lerProducao(p.inicio, 'agora');
+   const atual = await pedidoAtual;
    agora = (atual.registros || []).filter(r => r.data === p.data && r.turno === p.turno);
   } catch (e) { erro = e.message; }
   finally { carregando = false; render(); }
  }
 
- for (const evento of ['rt-schedule-changed', 'rt-data-restored']) document.addEventListener(evento, () => { histDe = ''; carregar(); });
+ // A produção não muda quando a escala é editada: só refaz a conta com a escala nova, sem reler 30 dias do Gestor Saúde.
+ function recalcular() { if (histRegistros) hist = historico(histRegistros, (data, turno) => escaladosComArea(seed, storage, data, turno)); }
+ for (const evento of ['rt-schedule-changed', 'rt-data-restored']) document.addEventListener(evento, () => { recalcular(); render(); });
  document.querySelector('[data-view="overview"]')?.addEventListener('click', carregar);
  document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar(); });
  render();

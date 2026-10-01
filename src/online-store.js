@@ -39,12 +39,14 @@ export function mergeItems(base, local, remoto) {
 }
 
 export async function connectStore() {
+  // Sessão e dados pedidos ao mesmo tempo; no modo local a resposta dos dados é simplesmente ignorada.
+  const estadoPedido = fetch('/api/state', {cache: 'no-store'}).catch(() => null);
   const sessionResponse = await fetch('/api/session');
   if (!sessionResponse.ok) throw new Error('Sessão indisponível. Entre novamente em outra aba e recarregue esta página.');
   const session = await sessionResponse.json();
   if (session.mode === 'local') return localStorage;
-  const response = await fetch('/api/state');
-  if (!response.ok) throw new Error('Não foi possível carregar a escala salva. Recarregue para tentar novamente.');
+  const response = await estadoPedido;
+  if (!response?.ok) throw new Error('Não foi possível carregar a escala salva. Recarregue para tentar novamente.');
   const state = await response.json();
   // base: como os dados estavam no servidor na última sincronização (para juntar com outro aparelho).
   let revision = state.revision, dirty = false, saving = false, generation = 0, autoTimer, base = {...state.items};
@@ -107,7 +109,8 @@ export async function connectStore() {
   setInterval(async()=>{
     if(dirty||saving||document.hidden||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
     const before=generation;
-    try{const r=await fetch('/api/state');if(!r.ok)return;const latest=await r.json();if(!dirty&&!saving&&generation===before&&latest.revision!==revision){store.items=new Map(Object.entries(latest.items));revision=latest.revision;base={...latest.items};status.textContent='Atualizado de outro dispositivo';document.dispatchEvent(new Event('rt-data-restored'));}}catch{}
+    // ?desde: se nada mudou, o servidor responde só a versão (sem a escala inteira a cada 5 s).
+    try{const r=await fetch('/api/state?desde='+encodeURIComponent(revision),{cache:'no-store'});if(!r.ok)return;const latest=await r.json();if(latest.inalterado)return;if(!dirty&&!saving&&generation===before&&latest.revision!==revision){store.items=new Map(Object.entries(latest.items));revision=latest.revision;base={...latest.items};status.textContent='Atualizado de outro dispositivo';document.dispatchEvent(new Event('rt-data-restored'));}}catch{}
   },5000);
   return store;
 }

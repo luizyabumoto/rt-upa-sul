@@ -21,9 +21,12 @@ import {mountCabecalho, mountAtencao} from './painel.js';
 import {mountLotacao} from './lotacao.js';
 import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
+// A escala-base é pedida junto com a sessão e os dados (antes vinha só depois, uma ida a mais ao servidor).
+// no-cache: o navegador guarda e só confere se mudou (resposta 304, sem baixar os 100 KB de novo).
+const seedPedido = fetch('/src/seed.json',{cache:'no-cache'});
 let storage;
 try { storage = await connectStore(); } catch(error) { document.querySelector('main').textContent = error.message; throw error; }
-const seedResponse = await fetch('/src/seed.json',{cache:'no-store'});
+const seedResponse = await seedPedido;
 if (!seedResponse.ok) { document.querySelector('main').textContent = 'Não foi possível carregar a escala. Entre novamente e recarregue a página.'; throw new Error('Seed indisponível'); }
 const seed = await seedResponse.json();
 // Nomes, CRMs e vínculos salvos antes do cadastro único passam para a forma padronizada.

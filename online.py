@@ -1,9 +1,12 @@
 """Aplicação WSGI: autenticação, armazenamento privado e exportação."""
 import base64
+import hashlib
 import json
 import os
 import re
 import tempfile
+import threading
+import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from pathlib import Path
@@ -60,6 +63,70 @@ def remote(path, method='GET', data=None, token=None):
         raise ApiError(503, 'Não foi possível acessar seus dados. Tente novamente.') from error
     except (URLError, TimeoutError) as error:
         raise ApiError(503, 'Serviço temporariamente indisponível. Suas alterações continuam nesta tela.') from error
+
+
+# Sessão conferida no Supabase fica lembrada por até 5 min (nunca além do vencimento do token): antes, cada
+# arquivo da página e cada sincronização faziam 2 consultas ao Supabase antes de responder.
+SESSAO_CACHE_S = 300
+_SESSOES = {}
+_SESSOES_TRAVA = threading.Lock()
+
+
+def _chave_sessao(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _vencimento_jwt(token):
+    try:
+        parte = token.split('.')[1]
+        return float(json.loads(base64.urlsafe_b64decode(parte + '=' * (-len(parte) % 4))).get('exp') or 0)
+    except (IndexError, ValueError, TypeError, AttributeError):
+        return 0
+
+
+def usuario_autorizado(token):
+    chave, agora = _chave_sessao(token), time.time()
+    with _SESSOES_TRAVA:
+        guardado = _SESSOES.get(chave)
+    if guardado and agora < guardado[0]:
+        return guardado[1]
+    user = remote('/auth/v1/user', token=token)
+    if user.get('is_anonymous') or not remote('/rest/v1/rt_members?select=user_id', token=token):
+        raise ApiError(403, 'Acesso não autorizado.')
+    validade = min(agora + SESSAO_CACHE_S, _vencimento_jwt(token) or agora + SESSAO_CACHE_S)
+    with _SESSOES_TRAVA:
+        if len(_SESSOES) > 500:
+            _SESSOES.clear()
+        _SESSOES[chave] = (validade, user)
+    return user
+
+
+def esquecer_sessao(token):
+    with _SESSOES_TRAVA:
+        _SESSOES.pop(_chave_sessao(token), None)
+
+
+# Arquivos do site lidos uma vez por processo, com ETag: o navegador revalida e recebe 304 (sem corpo) se nada mudou.
+_ARQUIVOS = {}
+
+
+def arquivo(relativo):
+    caminho = ROOT / relativo
+    info = caminho.stat()
+    chave = (relativo, info.st_mtime_ns, info.st_size)
+    guardado = _ARQUIVOS.get(chave)
+    if guardado is None:
+        corpo = caminho.read_bytes()
+        resumo = hashlib.sha256(corpo).hexdigest()
+        # O Edge só revalida o cache com Last-Modified (ignora o ETag). A data sai do conteúdo, não do arquivo:
+        # na Vercel a data dos arquivos pode ser a mesma em todo deploy, e o navegador ficaria com versão velha.
+        segundos = 946684800 + int(resumo[:12], 16) % (20 * 365 * 86400)
+        data = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(segundos))
+        guardado = (corpo, '"' + resumo[:24] + '"', data)
+        if len(_ARQUIVOS) > 200:
+            _ARQUIVOS.clear()
+        _ARQUIVOS[chave] = guardado
+    return guardado
 
 
 def validate_items(items):
@@ -255,17 +322,29 @@ def validate_subscription(sub):
 
 def app(environ, start_response):
     extra = []
-    def respond(status, body, content_type='application/json; charset=utf-8'):
+    def respond(status, body, content_type='application/json; charset=utf-8', cache='no-store'):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode('utf8')
         elif isinstance(body, str):
             body = body.encode('utf8')
-        headers = [('Content-Type', content_type), ('Cache-Control', 'no-store'),
+        headers = [('Content-Type', content_type), ('Cache-Control', cache),
                    ('X-Content-Type-Options', 'nosniff'), ('Referrer-Policy', 'same-origin'),
                    ('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"), *extra]
+        if status != 304:
+            # Sem o tamanho, o navegador não sabe se recebeu o arquivo inteiro e não guarda no cache.
+            headers.append(('Content-Length', str(len(body))))
         start_response(f'{status} {HTTPStatus(status).phrase}', headers)
         # Iterator allows streaming the official workbook, which exceeds 4.5 MB.
         return (body[i:i + 65536] for i in range(0, len(body), 65536))
+
+    def static(relativo, content_type, cache='private, no-cache'):
+        # no-cache = guarda, mas confere com o servidor; a resposta 304 não traz o arquivo de novo.
+        corpo, etag, data = arquivo(relativo)
+        extra.extend([('ETag', etag), ('Last-Modified', data)])
+        # Igualdade exata da data (não "anterior a"): qualquer mudança de conteúdo muda a data e o arquivo vem de novo.
+        if etag in (environ.get('HTTP_IF_NONE_MATCH') or '').replace('W/', '').split(', ') or environ.get('HTTP_IF_MODIFIED_SINCE') == data:
+            return respond(304, b'', content_type, cache)
+        return respond(200, corpo, content_type, cache)
 
     def cookie(value, age=3600):
         secure = '' if os.environ.get('APP_ORIGIN', '').startswith('http://127.0.0.1:') else '; Secure'
@@ -289,18 +368,18 @@ def app(environ, start_response):
             if not isinstance(payload, dict):
                 raise ApiError(400, 'Pedido inválido.')
 
-        if method == 'GET' and path in ('/sw.js', '/manifest.webmanifest', '/icon.png'):
-            if path == '/icon.png':
-                return respond(200, base64.b64decode((ROOT / 'icon.png.b64').read_text()), 'image/png')
-            return respond(200, (ROOT / path.lstrip('/')).read_bytes(), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json')
+        if method == 'GET' and path in ('/sw.js', '/manifest.webmanifest', '/icon.png', '/favicon.ico'):
+            if path in ('/icon.png', '/favicon.ico'):
+                return respond(200, base64.b64decode(arquivo('icon.png.b64')[0]), 'image/png', 'public, max-age=86400')
+            return static(path.lstrip('/'), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json', 'no-cache')
         if path in ('/src/dark.css', '/src/theme.css') and method == 'GET':
-            return respond(200,(ROOT/path.lstrip('/')).read_bytes(),'text/css; charset=utf-8')
+            return static(path.lstrip('/'), 'text/css; charset=utf-8', 'no-cache')
         if path == '/src/inter.woff2' and method == 'GET':
-            return respond(200,(ROOT/'src/inter.woff2').read_bytes(),'font/woff2')
+            return static('src/inter.woff2', 'font/woff2', 'public, max-age=604800')
         if path == '/login' and method == 'GET':
-            return respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
+            return static('login.html', 'text/html; charset=utf-8', 'no-cache')
         if path == '/src/login.js' and method == 'GET':
-            return respond(200, (ROOT / 'src/login.js').read_bytes(), 'text/javascript; charset=utf-8')
+            return static('src/login.js', 'text/javascript; charset=utf-8', 'no-cache')
         if path == '/api/login' and method == 'POST':
             email, password = payload.get('email'), payload.get('password')
             if not isinstance(email, str) or not isinstance(password, str) or len(email) > 320 or len(password) > 1000:
@@ -317,6 +396,7 @@ def app(environ, start_response):
         if path == '/api/logout' and method == 'POST':
             cookie('', 0)
             if token:
+                esquecer_sessao(token)
                 remote('/auth/v1/logout?scope=local', 'POST', {}, token)
             return respond(200, {'ok': True})
         if not token:
@@ -324,15 +404,13 @@ def app(environ, start_response):
                 extra.append(('Location', '/login'))
                 return respond(303, '')
             raise ApiError(401, 'Entre na sua conta para continuar.')
-        user = remote('/auth/v1/user', token=token)
-        if user.get('is_anonymous') or not remote('/rest/v1/rt_members?select=user_id', token=token):
-            raise ApiError(403, 'Acesso não autorizado.')
+        user = usuario_autorizado(token)
         if path in ('/', '/index.html') and method == 'GET':
-            return respond(200, (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8')
+            return static('index.html', 'text/html; charset=utf-8')
         if path in ASSETS and method == 'GET':
-            return respond(200, (ROOT / path.lstrip('/')).read_bytes(), 'text/javascript; charset=utf-8')
+            return static(path.lstrip('/'), 'text/javascript; charset=utf-8')
         if path == '/src/seed.json' and method == 'GET':
-            return respond(200, (ROOT / 'src/seed.json').read_bytes())
+            return static('src/seed.json', 'application/json; charset=utf-8')
         if path == '/api/session' and method == 'GET':
             return respond(200, {'email': user.get('email'), 'id': user['id']})
         if path == '/api/fluxo' and method == 'GET':
@@ -388,6 +466,14 @@ def app(environ, start_response):
                 return respond(200, remote('/functions/v1/rt-push', 'POST', {'action': 'test', 'endpoint': endpoint}, token))
             raise ApiError(404, 'Ação desconhecida.')
         if path == '/api/state' and method == 'GET':
+            # Sincronização periódica: ?desde=<versão> só baixa a escala inteira quando ela mudou.
+            from urllib.parse import parse_qs
+            desde = (parse_qs(environ.get('QUERY_STRING', '')).get('desde') or [None])[0]
+            if desde is not None:
+                rows = remote('/rest/v1/rt_state?select=revision', token=token)
+                atual = rows[0]['revision'] if rows else 0
+                if str(atual) == desde:
+                    return respond(200, {'revision': atual, 'inalterado': True})
             rows = remote('/rest/v1/rt_state?select=items,revision', token=token)
             return respond(200, rows[0] if rows else {'items': {}, 'revision': 0})
         if path == '/api/state' and method == 'PUT':
