@@ -19,6 +19,8 @@ import {reincluirMedico} from './cadastro.js';
 import {mountResumo} from './resumo.js';
 import {mountCabecalho, mountAtencao} from './painel.js';
 import {mountLotacao} from './lotacao.js';
+import {mountDocumentos} from './documentos.js';
+import {mountTopo} from './topo.js';
 import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
 // A escala-base é pedida junto com a sessão e os dados (antes vinha só depois, uma ida a mais ao servidor).
@@ -131,6 +133,8 @@ try{mountVersoes(storage);}catch(error){console.error('Versões',error);}
 try{mountResumo(storage,seed);}catch(error){console.error('Resumo do dia',error);}
 try{mountCabecalho();mountAtencao(storage,seed);}catch(error){console.error('Médicos do plantão',error);}
 try{mountLotacao(storage,seed);}catch(error){console.error('Lotação',error);}
+try{mountDocumentos(storage);}catch(error){console.error('Documentos',error);}
+try{mountTopo();}catch(error){console.error('Tema e impressão',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

@@ -1,0 +1,44 @@
+/* ============================================================================================
+   Modo claro (botão "Modo claro" no topo). Troca a paleta de theme.css e corrige as poucas cores
+   fixas pensadas para o fundo escuro. Só vale com <html data-theme="light">.
+   ============================================================================================ */
+:root[data-theme="light"]{
+ --bg:#f3f5f9;--bg-2:#eceff4;
+ --surface:#ffffff;--surface-2:#f5f7fa;--surface-3:#eaeef4;--surface-input:#ffffff;
+ --line:#e1e6ee;--line-2:#d3dae5;--line-3:#bcc6d4;
+ --text:#142033;--text-2:#475569;--text-3:#6b7a90;
+ --accent:#0f9f8c;--accent-2:#0b8576;--accent-ink:#ffffff;--accent-text:#0b7a6c;
+ --accent-soft:rgba(15,159,140,.09);--accent-line:rgba(15,159,140,.30);
+ --warn:#c9810f;--warn-soft:rgba(234,160,40,.12);--warn-line:rgba(201,129,15,.40);--warn-text:#8a5300;
+ --danger:#d23c3c;--danger-soft:rgba(210,60,60,.08);--danger-line:rgba(210,60,60,.35);--danger-text:#b42323;
+ --ok:#16834a;--info:#2f62d0;
+ --m-cinza:#6b7890;--m-preto:#3d4655;
+ --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px -14px rgba(16,24,40,.22);
+ color-scheme:light;background:var(--bg);color:var(--text);
+}
+:root[data-theme="light"] body{background:radial-gradient(1200px 600px at 85% -10%,rgba(15,159,140,.07),transparent 60%),radial-gradient(900px 500px at -10% 0%,rgba(47,98,208,.05),transparent 55%),var(--bg)!important;color:var(--text)}
+:root[data-theme="light"] ::selection{background:rgba(15,159,140,.2)}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb{border-color:var(--bg)}
+:root[data-theme="light"] header{background:rgba(255,255,255,.85)!important;border-bottom-color:var(--line)!important}
+:root[data-theme="light"] header h1{color:var(--text)!important}
+:where(:root[data-theme="light"]) button{background:linear-gradient(180deg,#14ad98,#0d917f)!important;color:#fff!important;border-color:#0d917f!important;box-shadow:0 1px 2px rgba(16,24,40,.12)!important}
+:where(:root[data-theme="light"]) button.secondary,:where(:root[data-theme="light"]) .workspace-nav~* button.secondary{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line-2)!important;box-shadow:0 1px 2px rgba(16,24,40,.05)!important}
+:where(:root[data-theme="light"]) button.secondary:hover{background:var(--surface-2)!important}
+:where(:root[data-theme="light"]) button.danger,:where(:root[data-theme="light"]) button.secondary.danger{background:var(--danger-soft)!important;color:var(--danger-text)!important;border-color:var(--danger-line)!important;box-shadow:none!important}
+:where(:root[data-theme="light"]) input,:where(:root[data-theme="light"]) select,:where(:root[data-theme="light"]) textarea{background:#fff!important;color:var(--text)!important;border-color:var(--line-2)!important}
+:where(:root[data-theme="light"]) input::placeholder,:where(:root[data-theme="light"]) textarea::placeholder{color:#94a0b2!important}
+:root[data-theme="light"] .badge{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent-line)!important}
+:root[data-theme="light"] header button.topo-tema{color:#4b5ab8!important}
+
+:root[data-theme="light"] .workspace-nav{background:rgba(255,255,255,.9)!important}
+:root[data-theme="light"] .workspace-nav button.active{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent-line)!important}
+:root[data-theme="light"] .vagas-alerta li{background:rgba(255,255,255,.75)!important}
+:root[data-theme="light"] .vagas-alerta{background:linear-gradient(180deg,var(--warn-soft),rgba(255,255,255,.4))!important}
+:root[data-theme="light"] .affiliation.link-sms{color:#1f2937!important;background:#e7ebf1!important}
+:root[data-theme="light"] .affiliation.link-coaph{color:#1d4ed8!important;background:rgba(47,98,208,.10)!important}
+:root[data-theme="light"] .affiliation.link-extra{color:#15803d!important;background:rgba(22,131,74,.10)!important}
+:root[data-theme="light"] .quick-view .link-coaph,:root[data-theme="light"] .doctor-name.link-coaph,:root[data-theme="light"] select.link-coaph{color:#1d4ed8!important}
+:root[data-theme="light"] .quick-view .link-extra,:root[data-theme="light"] .doctor-name.link-extra,:root[data-theme="light"] select.link-extra{color:#15803d!important}
+:root[data-theme="light"] header button.topo-tema{color:#4b5ab8!important}
+:root[data-theme="light"] .shift-card h3,:root[data-theme="light"] .quick-days-box h3{color:var(--text-2)!important}
+:root[data-theme="light"] .push-settings p,:root[data-theme="light"] .notice,:root[data-theme="light"] .muted{color:var(--text-2)!important}

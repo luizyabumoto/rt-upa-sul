@@ -18,7 +18,7 @@ from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, co
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
+ASSETS = {'/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
@@ -134,7 +134,7 @@ def validate_items(items):
         raise ApiError(400, 'Backup inválido.')
     result = {}
     for key, value in items.items():
-        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|atencao|lotacao|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
+        if not isinstance(key, str) or not re.fullmatch(r'rt-upa:(roster|coverages|organizer|doctors|fixed|absences|trocas|historico|clinicoRoster|excluidos|atencao|lotacao|documentos|visits:weekly|edits:\d{4}:\d{1,2}:[12])', key):
             raise ApiError(400, 'Registro desconhecido no backup.')
         if not isinstance(value, str):
             raise ApiError(400, 'Backup inválido.')
@@ -287,6 +287,19 @@ def validate_items(items):
                     valid = isinstance(item, dict) and isinstance(item.get('doctor'), str) and all(isinstance(item.get(k), str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', item[k]) for k in ('start', 'end')) and item['start'] <= item['end']
                 if not valid:
                     raise ApiError(400, 'Registro inválido.')
+        elif name == 'documentos':
+            # Comunicações Internas (CI) da aba Documentos: numeradas por ano, texto livre com limite de tamanho.
+            if not isinstance(parsed, list) or len(parsed) > 3000:
+                raise ApiError(400, 'Lista de documentos inválida.')
+            campos = {'id': 100, 'data': 10, 'para': 300, 'de': 300, 'assunto': 300, 'corpo': 20000, 'anexos': 500,
+                      'assinante': 200, 'cargo': 200, 'crm': 40, 'status': 20, 'criadoEm': 40, 'atualizadoEm': 40, 'emitidaEm': 40}
+            vistos = set()
+            for item in parsed:
+                if not isinstance(item, dict) or set(item) - set(campos) - {'numero', 'ano', 'maiusculas'}                         or any(not isinstance(item.get(k, ''), str) or len(item.get(k, '')) > limite for k, limite in campos.items()):
+                    raise ApiError(400, 'Documento inválido.')
+                if not item.get('id') or item['id'] in vistos or item.get('status') not in ('rascunho', 'emitida')                         or type(item.get('numero')) is not int or not 1 <= item['numero'] <= 9999                         or type(item.get('ano')) is not int or not 2000 <= item['ano'] <= 2100                         or type(item.get('maiusculas', True)) is not bool or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', item.get('data', '')):
+                    raise ApiError(400, 'Número, data ou situação do documento inválidos.')
+                vistos.add(item['id'])
         else:
             if not isinstance(parsed, dict) or len(parsed) > 500:
                 raise ApiError(400, 'Grade inválida.')
@@ -372,7 +385,7 @@ def app(environ, start_response):
             if path in ('/icon.png', '/favicon.ico'):
                 return respond(200, base64.b64decode(arquivo('icon.png.b64')[0]), 'image/png', 'public, max-age=86400')
             return static(path.lstrip('/'), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json', 'no-cache')
-        if path in ('/src/dark.css', '/src/theme.css') and method == 'GET':
+        if path in ('/src/dark.css', '/src/theme.css', '/src/light.css', '/src/documentos.css') and method == 'GET':
             return static(path.lstrip('/'), 'text/css; charset=utf-8', 'no-cache')
         if path == '/src/inter.woff2' and method == 'GET':
             return static('src/inter.woff2', 'font/woff2', 'public, max-age=604800')

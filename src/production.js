@@ -47,6 +47,16 @@ export function periodo(chave, agora = new Date()) {
 const somaClasses = (alvo, classes) => { for (const [k, v] of Object.entries(classes || {})) alvo[k] = (alvo[k] || 0) + v; return alvo; };
 const consultas = r => r.adulto + r.pediatria;
 
+// Área do médico no período: pediatra quem atendeu mais no Consultório Pediátrico; senão, clínico.
+export const areaMedico = m => m.pediatria > m.adulto ? 'pediatria' : 'adulto';
+export const AREAS_PROD = [['adulto', 'Médicos clínicos'], ['pediatria', 'Médicos pediatras']];
+// Só os registros dos médicos da área (a área vem do período inteiro, para não mudar com o filtro de turno).
+export function filtrarArea(registros, area) {
+ if (!area) return registros;
+ const pediatras = new Set(ranking(registros).filter(m => areaMedico(m) === 'pediatria').map(m => m.medico));
+ return registros.filter(r => (pediatras.has(r.medico) ? 'pediatria' : 'adulto') === area);
+}
+
 export function ranking(registros) {
  const porMedico = new Map();
  for (const r of registros) {
@@ -264,7 +274,7 @@ export function mountProduction(storage, seed) {
  const panel = document.querySelector('#production-panel');
  if (!panel) return;
  panel.innerHTML = '<div class="section-heading"><div><p class="eyebrow">GESTOR SAÚDE · PRODUÇÃO ANALÍTICO</p><h2>Produção médica</h2></div><div class="actions"><span class="prod-updated" role="status" aria-live="polite"></span><button type="button" class="secondary prod-refresh">Atualizar</button><button type="button" class="secondary prod-print">Relatório do mês (PDF)</button></div></div>' +
-  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Turno<select class="prod-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–19h)</option><option value="N">Só noturno (19h–07h)</option></select></label><label>Buscar médico<input type="search" class="prod-busca" placeholder="Nome do médico"></label><label>Ranking<select class="prod-group"></select></label><label>Comparar com<select class="prod-compare"><option value="">Sem comparação</option><option value="anterior">Período anterior</option><option value="ano">Mesmo período do ano passado</option></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
+  '<div class="prod-controls"><label>Período<select class="prod-period"></select></label><label class="prod-free" hidden>Início<input type="datetime-local" class="prod-start"></label><label class="prod-free" hidden>Fim<input type="datetime-local" class="prod-end"></label><label>Turno<select class="prod-turno"><option value="">Diurno + noturno</option><option value="D">Só diurno (07h–19h)</option><option value="N">Só noturno (19h–07h)</option></select></label><label>Área<select class="prod-area"><option value="">Clínicos + pediatras</option><option value="adulto">Só médicos clínicos</option><option value="pediatria">Só médicos pediatras</option></select></label><label>Buscar médico<input type="search" class="prod-busca" placeholder="Nome do médico"></label><label>Ranking<select class="prod-group"></select></label><label>Comparar com<select class="prod-compare"><option value="">Sem comparação</option><option value="anterior">Período anterior</option><option value="ano">Mesmo período do ano passado</option></select></label><button type="button" class="secondary prod-csv">Baixar tabela (CSV)</button></div>' +
   '<p class="flow-alert prod-alert" role="alert" hidden></p><div class="flow-kpis prod-kpis"></div><div class="prod-escala"></div><div class="prod-tables"></div>' +
   '<p class="notice">Consultas nos Consultórios Adulto (Médico Clínico) e Pediátrico (Médico Pediatra), pelo horário do atendimento. Plantões de 12 h: diurno 07h–19h e noturno 19h–07h. Retornos baixados aparecem à parte e não entram no total nem no ranking. Clique no nome do médico para ver os plantões dele na escala.</p>';
  const $ = s => panel.querySelector(s);
@@ -272,8 +282,8 @@ export function mountProduction(storage, seed) {
  for (const [v, t] of AGRUPAR) $('.prod-group').add(new Option(t, v));
  let dados = null, lista = [], carregando = false, pedido = 0, comparado = null;
  // Filtro de turno (diurno/noturno) aplicado a todas as tabelas; é filtro local, não recarrega o Gestor Saúde.
- let turnoAtual = '', buscaAtual = '';
- const filtra = rs => turnoAtual ? (rs || []).filter(r => r.turno === turnoAtual) : (rs || []);
+ let turnoAtual = '', buscaAtual = '', areaAtual = '';
+ const filtra = rs => { const l = filtrarArea(rs || [], areaAtual); return turnoAtual ? l.filter(r => r.turno === turnoAtual) : l; };
  // Busca de médico: casa por nome sem acento; vazio mostra todos.
  const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
  const casaMedico = m => !buscaAtual || semAcento(m.medico).includes(buscaAtual);
@@ -301,7 +311,7 @@ export function mountProduction(storage, seed) {
   return b;
  }
 
- function tabelaRanking() {
+ function tabelaRanking(lista, titulo = 'Ranking de consultas') {
   const tabela = el('table', 'prod-table'), head = el('tr');
   for (const [t, cls] of [['#'], ['Médico'], ['Consultas', 'num'], ['Adulto', 'num'], ['Pediatria', 'num'], ['Plantões', 'num'], ['Média/plantão', 'num']]) head.append(el('th', cls || '', t));
   for (const [chave, nome, cor] of CLASSES) {
@@ -323,7 +333,7 @@ export function mountProduction(storage, seed) {
   });
   tabela.append(body);
   const wrap = el('div', 'table-wrap'); wrap.append(tabela);
-  const box = el('section', 'prod-section'); box.append(el('h3', '', 'Ranking de consultas'), wrap, el('small', 'muted', '* Retornos baixados: só para conhecimento, fora do total e do ranking.'));
+  const box = el('section', 'prod-section'); box.append(el('h3', '', titulo), wrap, el('small', 'muted', '* Retornos baixados: só para conhecimento, fora do total e do ranking.'));
   return box;
  }
 
@@ -531,7 +541,7 @@ export function mountProduction(storage, seed) {
    ...[['CONSULTAS', total, `${dataBR(dados.inicio)} ${dados.inicio.slice(11, 16)} → ${dados.emAndamento ? 'agora' : `${dataBR(dados.fim)} ${dados.fim.slice(11, 16)}`}${comp(total, base && soma(base, 'total'))}`],
     ['ADULTO', soma(comConsulta, 'adulto'), `Médico Clínico${comp(soma(comConsulta, 'adulto'), base && soma(base, 'adulto'))}`],
     ['PEDIATRIA', soma(comConsulta, 'pediatria'), `Médico Pediatra${comp(soma(comConsulta, 'pediatria'), base && soma(base, 'pediatria'))}`],
-    ['MÉDICOS', comConsulta.length, `${(total / horas).toFixed(1).replace('.', ',')} consultas por hora`],
+    ['MÉDICOS', comConsulta.length, `${comConsulta.filter(m => areaMedico(m) === 'adulto').length} clínicos · ${comConsulta.filter(m => areaMedico(m) === 'pediatria').length} pediatras · ${(total / horas).toFixed(1).replace('.', ',')} consultas/h`],
     ['RETORNOS BAIXADOS', lista.reduce((s, m) => s + m.retornos, 0), 'à parte · não contam']].map(([rotulo, valor, detalhe]) => {
     const box = el('div', 'flow-kpi'); box.append(el('span', 'flow-kpi-label', rotulo), el('strong', 'flow-kpi-value', String(valor)), el('small', '', detalhe)); return box; }));
   cartaoEscala();
@@ -539,7 +549,9 @@ export function mountProduction(storage, seed) {
   tabelas.replaceChildren();
   if (!lista.length) { tabelas.append(el('p', 'notice', 'Nenhuma consulta registrada neste período.')); return; }
   if (agrupamento !== 'total' && !buscaAtual) tabelas.append(tabelaGrupos(agrupamento));
-  tabelas.append(tabelaRanking());
+  // Clínicos e pediatras em rankings separados (cada um com a sua numeração).
+  const areas = AREAS_PROD.filter(([a]) => !areaAtual || a === areaAtual).map(([a, nome]) => [nome, lista.filter(m => areaMedico(m) === a)]).filter(([, l]) => l.length);
+  for (const [nome, l] of areas) tabelas.append(tabelaRanking(l, `Ranking de consultas · ${nome.toLowerCase()} (${l.filter(m => m.total).length})`));
   if (!buscaAtual) tabelas.append(tabelaEquipes());
   tabelas.append(tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento(), tabelaFaltas());
  }
@@ -580,7 +592,7 @@ export function mountProduction(storage, seed) {
  $('.prod-start').onchange = $('.prod-end').onchange = carregar;
  $('.prod-group').onchange = render;
  // Delegação no painel: sobrevive a qualquer re-render e capta a mudança do turno de forma confiável.
- panel.addEventListener('change', e => { if (e.target.classList.contains('prod-turno')) { turnoAtual = e.target.value; render(); } });
+ panel.addEventListener('change', e => { if (e.target.classList.contains('prod-turno')) { turnoAtual = e.target.value; render(); } if (e.target.classList.contains('prod-area')) { areaAtual = e.target.value; render(); } });
  $('.prod-compare').onchange = carregar;
  $('.prod-refresh').onclick = carregar;
  panel.addEventListener('input', e => { if (e.target.classList.contains('prod-busca')) { buscaAtual = semAcento(e.target.value.trim()); render(); } });

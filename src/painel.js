@@ -6,6 +6,9 @@ import {lerProducao} from './resumo.js';
 import {escaladosComArea, historico, avaliarPlantao, atualizarAcompanhamento, lerAcompanhamento, registrarConversa, desfazerConversa, chaveSalva, indice, situacao, JANELA_DIAS, ENTRA} from './atencao.js';
 
 const HORA = 3600000;
+export const AREAS = [['adulto', 'Médicos clínicos'], ['pediatria', 'Médicos pediatras']];
+// Área de um médico pelo histórico: onde fez mais plantões comparáveis (adulto ou pediatria).
+export const areaDoHistorico = plantoes => plantoes.filter(p => p.area === 'pediatria').length > plantoes.length / 2 ? 'pediatria' : 'adulto';
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
 const dataBR = d => d.slice(0, 10).split('-').reverse().slice(0, 2).join('/');
 const pct = v => `${Math.round(v * 100)}%`;
@@ -120,16 +123,20 @@ export function mountAtencao(storage, seed) {
   const det = el('details', 'atc-todos');
   const lista = (hist || []).map(h => {
    const v = indice(h.plantoes), salvo = acomp[chaveSalva(acomp, h.medico)];
-   return {medico: h.medico, plantoes: h.plantoes.length, indice: v, situacao: situacao(v, salvo?.emAtencao ? 'atencao' : undefined)};
+   return {medico: h.medico, area: areaDoHistorico(h.plantoes), plantoes: h.plantoes.length, indice: v, situacao: situacao(v, salvo?.emAtencao ? 'atencao' : undefined)};
   }).filter(m => m.indice !== null).sort((a, b) => a.indice - b.indice);
   const n = lista.filter(m => m.situacao === 'atencao').length;
   det.append(el('summary', '', `Todos os médicos · últimos ${JANELA_DIAS} dias${n ? ` · ${n} em atenção` : ''}`));
   if (!lista.length) { det.append(el('p', 'muted', 'Sem dados de produção suficientes.')); return det; }
+  for (const [area, nome] of AREAS) {
+  const daArea = lista.filter(m => m.area === area);
+  if (!daArea.length) continue;
+  det.append(el('h4', `atc-area-titulo ${area}`, `${nome} · ${daArea.length}`));
   const tabela = el('table', 'prod-table atc-tabela'), cab = el('tr');
   for (const [t, c] of [['Médico'], ['Plantões', 'num'], ['% da média dos colegas', 'num'], ['Situação']]) cab.append(el('th', c || '', t));
   const thead = el('thead'); thead.append(cab); tabela.append(thead);
   const corpo = el('tbody');
-  for (const m of lista) {
+  for (const m of daArea) {
    const tr = el('tr', m.situacao === 'atencao' ? 'atc-linha-ruim' : '');
    const barra = el('td', 'num'); barra.append(el('strong', `atc-indice ${tom(m.indice)}`, pct(m.indice)));
    tr.append(el('td', 'strong', m.medico), el('td', 'num', String(m.plantoes)), barra, el('td', m.situacao === 'atencao' ? 'alerta strong' : 'muted', m.situacao === 'atencao' ? '⚠ Merece atenção' : 'Na média'));
@@ -138,6 +145,7 @@ export function mountAtencao(storage, seed) {
   tabela.append(corpo);
   const wrap = el('div', 'table-wrap'); wrap.append(tabela);
   det.append(wrap);
+  }
   return det;
  }
 
@@ -164,9 +172,20 @@ export function mountAtencao(storage, seed) {
   const resumo = el('div', `atc-resumo ${atencao ? 'ruim' : baixoHoje ? 'medio' : 'bom'}`);
   resumo.textContent = atencao ? `⚠ ${atencao} ${atencao === 1 ? 'médico merece' : 'médicos merecem'} atenção` : baixoHoje ? `${baixoHoje} abaixo dos colegas agora` : '✓ Todos na média';
   cab.append(resumo);
-  const grade = el('div', 'atc-grade');
-  for (const a of avaliados) grade.append(cartao(a, hoje));
-  host.append(grade, todos(acomp),
+  // Clínicos e pediatras em blocos separados: cada um só é comparado com os colegas da mesma área.
+  const grupos = [];
+  for (const [area, nome] of AREAS) {
+   const doGrupo = avaliados.filter(a => a.area === area);
+   if (!doGrupo.length) continue;
+   const bloco = el('section', `atc-area ${area}`), cabArea = el('h3', 'atc-area-titulo');
+   const emAtencao = doGrupo.filter(a => a.situacao === 'atencao').length;
+   cabArea.append(el('span', 'atc-area-ponto'), document.createTextNode(`${nome} · ${doGrupo.length}`), el('small', 'muted', emAtencao ? ` · ${emAtencao} em atenção` : ''));
+   const grade = el('div', 'atc-grade');
+   for (const a of doGrupo) grade.append(cartao(a, hoje));
+   bloco.append(cabArea, grade);
+   grupos.push(bloco);
+  }
+  host.append(...grupos, todos(acomp),
    el('small', 'muted atc-nota', `Merece atenção: abaixo de ${pct(ENTRA)} da média dos colegas. Depois de cobrado, só sai quando alcançar a média (100%). Box, cinderelas e extras ficam fora da conta; coberturas parciais contam pelas horas. Plantão com sala vermelha ou procedimentos pode ter menos consultas — use como ponto de conversa.`));
  }
 

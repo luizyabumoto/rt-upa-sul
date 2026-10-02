@@ -557,3 +557,15 @@ label.excluir-item{display:flex!important;align-items:center;gap:8px;font-size:1
 .lot-sms-incluir select{width:100%}
 @media(max-width:900px){.lot-sms-grade{grid-template-columns:1fr}}
 @media(max-width:650px){.lot-sms{padding:14px}}
+
+/* Clínicos × pediatras (Painel: médicos do plantão e escala de hoje) */
+.atc-area{margin:18px 0 6px}
+.atc-area-titulo{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:15px}
+.atc-area-titulo small{font-weight:500}
+.atc-area-ponto{width:10px;height:10px;border-radius:50%;background:var(--info)}
+.atc-area.pediatria .atc-area-ponto{background:#e0609a}
+h4.atc-area-titulo{margin:16px 0 8px;font-size:13px;color:var(--info)}
+h4.atc-area-titulo.pediatria{color:#e0609a}
+.quick-grupo{margin:10px 0 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding-left:8px;border-left:3px solid var(--info);color:var(--text-3)}
+.quick-grupo.ped{border-left-color:#e0609a}
+.quick-grupo.box{border-left-color:var(--warn)}
