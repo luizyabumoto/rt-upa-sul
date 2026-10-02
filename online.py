@@ -291,13 +291,14 @@ def validate_items(items):
             # Comunicações Internas (CI) da aba Documentos: numeradas por ano, texto livre com limite de tamanho.
             if not isinstance(parsed, list) or len(parsed) > 3000:
                 raise ApiError(400, 'Lista de documentos inválida.')
-            campos = {'id': 100, 'data': 10, 'para': 300, 'de': 300, 'assunto': 300, 'corpo': 20000, 'anexos': 500,
-                      'assinante': 200, 'cargo': 200, 'crm': 40, 'status': 20, 'criadoEm': 40, 'atualizadoEm': 40, 'emitidaEm': 40}
+            campos = {'id': 100, 'data': 10, 'prazo': 100, 'para': 300, 'paraCargo': 300, 'de': 300, 'assunto': 300, 'saudacao': 200,
+                      'corpo': 20000, 'anexos': 500, 'assinante': 200, 'cargo': 200, 'assinante2': 200, 'cargo2': 200, 'crm': 40,
+                      'status': 20, 'criadoEm': 40, 'atualizadoEm': 40, 'emitidaEm': 40}
             vistos = set()
             for item in parsed:
-                if not isinstance(item, dict) or set(item) - set(campos) - {'numero', 'ano', 'maiusculas'}                         or any(not isinstance(item.get(k, ''), str) or len(item.get(k, '')) > limite for k, limite in campos.items()):
+                if not isinstance(item, dict) or set(item) - set(campos) - {'numero', 'ano', 'maiusculas', 'eletronico'}                         or any(not isinstance(item.get(k, ''), str) or len(item.get(k, '')) > limite for k, limite in campos.items()):
                     raise ApiError(400, 'Documento inválido.')
-                if not item.get('id') or item['id'] in vistos or item.get('status') not in ('rascunho', 'emitida')                         or type(item.get('numero')) is not int or not 1 <= item['numero'] <= 9999                         or type(item.get('ano')) is not int or not 2000 <= item['ano'] <= 2100                         or type(item.get('maiusculas', True)) is not bool or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', item.get('data', '')):
+                if not item.get('id') or item['id'] in vistos or item.get('status') not in ('rascunho', 'emitida')                         or type(item.get('numero')) is not int or not 1 <= item['numero'] <= 9999                         or type(item.get('ano')) is not int or not 2000 <= item['ano'] <= 2100                         or type(item.get('maiusculas', True)) is not bool or type(item.get('eletronico', True)) is not bool or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', item.get('data', '')):
                     raise ApiError(400, 'Número, data ou situação do documento inválidos.')
                 vistos.add(item['id'])
         else:
