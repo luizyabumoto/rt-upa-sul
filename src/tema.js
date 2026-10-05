@@ -1,3 +1,2 @@
-// Aplica o tema escolhido (claro/escuro) antes de a página aparecer, para não piscar escuro ao abrir no modo claro.
-// Escolha guardada só neste aparelho; sem escolha, o site abre no modo escuro de sempre.
-try { var tema = localStorage.getItem('rt-upa-tema'); if (tema === 'light' || tema === 'dark') document.documentElement.dataset.theme = tema; } catch (e) {}
+// Aplica o tema antes de a página aparecer (sem piscar). Padrão: claro; a escolha fica guardada só neste aparelho.
+try { var tema = localStorage.getItem('rt-upa-tema'); document.documentElement.dataset.theme = tema === 'dark' ? 'dark' : 'light'; } catch (e) { document.documentElement.dataset.theme = 'light'; }

@@ -15,6 +15,18 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def do_GET(self):
+        if urlparse(self.path).path == '/api/internados':
+            global CENSO
+            from censo import Censo
+            from internacao import internados
+            CENSO = CENSO if 'CENSO' in globals() and CENSO else Censo()
+            data = json.dumps(internados(CENSO)).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if urlparse(self.path).path == '/api/session':
             data = b'{"mode":"local"}'
             self.send_response(200)

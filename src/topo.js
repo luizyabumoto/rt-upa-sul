@@ -1,7 +1,27 @@
 // Botões do topo: alternar modo claro/escuro (guardado neste aparelho, em todas as abas)
 // e imprimir / salvar em PDF a aba aberta, sempre em fundo claro para economizar tinta.
 const CHAVE = 'rt-upa-tema';
-const COR_BARRA = {dark: '#070b12', light: '#f4f6f9'};
+const COR_BARRA = {dark: '#070b12', light: '#f4f6fb'};
+// Ícones das abas (traço simples, herdam a cor do texto).
+const ICONES = {
+ overview: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
+ internados: '<path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3h-7v3"/><circle cx="7" cy="11" r="2"/>',
+ flow: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
+ production: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+ schedule: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+ roster: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M17 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
+ lotacao: '<path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6M3 21h18"/>',
+ documentos: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+ tasks: '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>',
+ notes: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+ assistant: '<path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/>',
+};
+export function decorarAbas() {
+ for (const b of document.querySelectorAll('.workspace-nav [data-view]')) {
+  if (b.querySelector('svg') || !ICONES[b.dataset.view]) continue;
+  b.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[b.dataset.view]}</svg>`);
+ }
+}
 
 export const temaAtual = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 
@@ -26,7 +46,13 @@ export function imprimirPagina() {
  setTimeout(fim, 1500);
 }
 
+// Marca do RT: cruz médica com o batimento cardíaco se desenhando por dentro (CSS em visual.css).
+export const MARCA = '<svg class="marca-svg" viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="marca-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6bff"/><stop offset=".55" stop-color="#3d8bff"/><stop offset="1" stop-color="#13b5b1"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="14" fill="url(#marca-grad)"/><path class="marca-cruz" d="M19.5 10.5h9v9h9v9h-9v9h-9v-9h-9v-9h9z"/><path class="marca-ecg" pathLength="100" d="M5 26.5h10l2.6-5.5 4 11 4.2-15 3.4 9.5H43"/><circle class="marca-ponto" cx="43" cy="26.5" r="1.8"/></svg>';
+
 export function mountTopo() {
+ decorarAbas();
+ const titulo = document.querySelector('body > header h1');
+ if (titulo && !titulo.querySelector('.marca')) { titulo.insertAdjacentHTML('afterbegin', `<span class="marca">${MARCA}</span>`); titulo.closest('header').classList.add('com-marca'); }
  const header = document.querySelector('body > header');
  if (!header || header.querySelector('.topo-acoes')) return;
  const caixa = document.createElement('div');

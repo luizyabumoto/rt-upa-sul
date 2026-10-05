@@ -20,7 +20,10 @@ import {mountResumo} from './resumo.js';
 import {mountCabecalho, mountAtencao} from './painel.js';
 import {mountLotacao} from './lotacao.js';
 import {mountDocumentos} from './documentos.js';
+import {mountInternados} from './internados.js';
+import {mountEquipeAgora} from './equipe.js';
 import {mountTopo} from './topo.js';
+import {mountDatasBR} from './datas.js';
 import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
 // A escala-base é pedida junto com a sessão e os dados (antes vinha só depois, uma ida a mais ao servidor).
@@ -49,7 +52,7 @@ function baseline(date,slot){return plannedDoctor(seed,storage,date,slot);}
 function storageKey(){return `edits:${document.querySelector('#year').value}:${monthEl.value}:${document.querySelector('#half').value}`}
 function settings(){for(const id of ['fixed-doctor','absence-doctor'])fillDoctorSelect(document.querySelector(`#${id}`));
  const container=document.querySelector('#settings-list');container.replaceChildren();
- for(const [type,items,describe] of [['fixed',get('fixed',[]),item=>`${WEEKDAYS[item.weekday]} · ${slotNames[item.slot]} · ${label(item.doctor)}`],['absences',get('absences',[]),item=>`${label(item.doctor)} · ${item.start} a ${item.end}`]]){
+ for(const [type,items,describe] of [['fixed',get('fixed',[]),item=>`${WEEKDAYS[item.weekday]} · ${slotNames[item.slot]} · ${label(item.doctor)}`],['absences',get('absences',[]),item=>`${label(item.doctor)} · ${item.start.split('-').reverse().join('/')} a ${item.end.split('-').reverse().join('/')}`]]){
   const heading=document.createElement('h3');heading.textContent=type==='fixed'?'Plantões fixos cadastrados':'Férias e afastamentos';container.append(heading);
   if(!items.length){const empty=document.createElement('p');empty.className='notice';empty.textContent='Nenhum registro.';container.append(empty)}
   items.forEach((item,index)=>{const entry=document.createElement('span');entry.className='entry';entry.append(document.createTextNode(describe(item)));const remove=document.createElement('button');remove.type='button';remove.textContent='Remover';remove.addEventListener('click',()=>{items.splice(index,1);put(type,items);settings();document.dispatchEvent(new Event('rt-schedule-changed'))});entry.append(remove);container.append(entry)})
@@ -134,7 +137,10 @@ try{mountResumo(storage,seed);}catch(error){console.error('Resumo do dia',error)
 try{mountCabecalho();mountAtencao(storage,seed);}catch(error){console.error('Médicos do plantão',error);}
 try{mountLotacao(storage,seed);}catch(error){console.error('Lotação',error);}
 try{mountDocumentos(storage);}catch(error){console.error('Documentos',error);}
+try{mountInternados();}catch(error){console.error('Internados',error);}
+try{mountEquipeAgora(storage,seed);}catch(error){console.error('Equipe agora',error);}
 try{mountTopo();}catch(error){console.error('Tema e impressão',error);}
+try{mountDatasBR();}catch(error){console.error('Datas',error);}
 mountScheduleView(storage,seed);
 mountRoster(storage,seed);
 mountPdf(storage);

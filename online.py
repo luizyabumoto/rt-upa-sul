@@ -18,11 +18,14 @@ from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, co
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
+ASSETS = {'/src/datas.js', '/src/internados.js', '/src/equipe.js', '/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
 DEMANDA = None
+CENSO = None
+INTERNACAO = None
+EQUIPE = None
 
 
 def parse_minuto(valor):
@@ -386,7 +389,7 @@ def app(environ, start_response):
             if path in ('/icon.png', '/favicon.ico'):
                 return respond(200, base64.b64decode(arquivo('icon.png.b64')[0]), 'image/png', 'public, max-age=86400')
             return static(path.lstrip('/'), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json', 'no-cache')
-        if path in ('/src/dark.css', '/src/theme.css', '/src/light.css', '/src/documentos.css') and method == 'GET':
+        if path in ('/src/dark.css', '/src/theme.css', '/src/light.css', '/src/documentos.css', '/src/internados.css', '/src/visual.css') and method == 'GET':
             return static(path.lstrip('/'), 'text/css; charset=utf-8', 'no-cache')
         if path == '/src/inter.woff2' and method == 'GET':
             return static('src/inter.woff2', 'font/woff2', 'public, max-age=604800')
@@ -445,6 +448,22 @@ def app(environ, start_response):
                 return respond(200, PRODUCAO.obter(inicio, fim))
             except ValueError as error:
                 raise ApiError(400, str(error))
+        if path == '/api/internados' and method == 'GET':
+            # Censo da planilha do NIR (sem nome, CPF, CNS, nascimento ou SISREG) + evolução médica do Gestor Saúde.
+            global CENSO, INTERNACAO
+            from censo import Censo
+            from gestor_saude import cliente_compartilhado
+            from internacao import PainelInternacao, internados
+            CENSO = CENSO or Censo()
+            INTERNACAO = INTERNACAO or (PainelInternacao() if cliente_compartilhado().configurado else None)
+            return respond(200, internados(CENSO, INTERNACAO))
+        if path == '/api/equipe' and method == 'GET':
+            # Quem está atendendo no plantão agora (consultórios e Box), pela produção do Gestor Saúde.
+            global EQUIPE
+            from internacao import PainelEquipe, PainelInternacao
+            INTERNACAO = INTERNACAO or PainelInternacao()
+            EQUIPE = EQUIPE or PainelEquipe(internacao=INTERNACAO)
+            return respond(200, EQUIPE.obter())
         if path == '/api/demanda' and method == 'GET':
             global DEMANDA
             from urllib.parse import parse_qs

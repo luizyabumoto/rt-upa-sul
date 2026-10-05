@@ -1,0 +1,133 @@
+/* ============================================================================================
+   Aba Internados: mapa de leitos (macas do Box e camas da enfermaria), visita do dia, CIDs.
+   ============================================================================================ */
+.int-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin:4px 0 18px}
+.int-hero h2{font-size:30px;margin:6px 0 4px;letter-spacing:-.02em}
+.int-sub{margin:0}
+.int-hero-acoes{display:flex;align-items:center;gap:10px}
+.int-alerta{margin-bottom:14px}
+
+/* Números principais */
+.int-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.int-kpi{position:relative;display:grid;gap:4px;align-content:start;padding:16px 16px 14px;border-radius:18px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;animation:rt-subir .5s cubic-bezier(.2,.8,.2,1) both}
+.int-kpi:nth-child(2){animation-delay:.04s}.int-kpi:nth-child(3){animation-delay:.08s}.int-kpi:nth-child(4){animation-delay:.12s}.int-kpi:nth-child(5){animation-delay:.16s}.int-kpi:nth-child(6){animation-delay:.2s}
+.int-kpi::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--accent)}
+.int-kpi.aviso::before{background:var(--warn)}.int-kpi.alerta::before{background:var(--danger)}.int-kpi.ok::before{background:var(--ok)}
+.int-kpi-rotulo{font-size:10.5px;font-weight:750;letter-spacing:.09em;color:var(--text-3)}
+.int-kpi-valor{font-size:28px;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.int-kpi.alerta .int-kpi-valor{color:var(--danger-text)}
+.int-kpi small{font-size:12px;color:var(--text-2)}
+.int-barra{height:7px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-top:6px}
+.int-barra span{display:block;height:100%;width:var(--w,0);border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--accent-2));transform-origin:left;animation:rt-crescer .9s cubic-bezier(.2,.8,.2,1) both}
+.int-kpi.alerta .int-barra span{background:linear-gradient(90deg,#f0883e,var(--danger))}
+
+/* Visita / evolução do dia */
+.int-visitas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.4fr);gap:12px;margin-bottom:16px}
+.int-visita,.int-visita-lista{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);animation:rt-subir .5s .1s cubic-bezier(.2,.8,.2,1) both}
+.int-visita>div{display:grid;gap:2px}
+.int-visita.pendente{border-color:var(--warn-line);background:linear-gradient(135deg,var(--warn-soft),transparent 70%),var(--surface)}
+.int-visita.ok{border-color:rgba(18,163,114,.35)}
+.int-visita-num{font-size:20px;letter-spacing:-.01em}
+.int-visita small{color:var(--text-2);font-size:12px}
+.int-visita.indisponivel{grid-column:1/-1}
+.int-visita-icone{font-size:22px;color:var(--info)}
+.int-visita.indisponivel p{margin:0;color:var(--text-2)}
+.int-visita-lista{flex-wrap:wrap;align-content:flex-start;align-items:flex-start;gap:6px}
+.int-visita-lista .int-kpi-rotulo{width:100%}
+.int-visita-lista p{margin:0}
+.int-anel{width:66px;height:66px;flex:none;transform:rotate(-90deg)}
+.int-anel circle{fill:none;stroke-width:8}
+.int-anel-fundo{stroke:var(--surface-3)}
+.int-anel-valor{stroke:var(--ok);stroke-linecap:round;animation:rt-anel 1.1s .2s cubic-bezier(.2,.8,.2,1) forwards}
+.int-anel-valor.medio{stroke:var(--warn)}.int-anel-valor.ruim{stroke:var(--danger)}
+.int-anel text{transform:rotate(90deg);transform-origin:38px 38px;font-size:15px;font-weight:800;fill:var(--text)}
+@keyframes rt-anel{to{stroke-dashoffset:var(--alvo)}}
+
+/* Cartões */
+.int-cartao{padding:18px 20px;border-radius:20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);margin-bottom:16px;animation:rt-subir .55s .12s cubic-bezier(.2,.8,.2,1) both}
+.int-cartao h3{margin:0 0 12px;font-size:16px}
+.int-duas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+
+/* Mapa de leitos */
+.int-mapas{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.6fr);gap:16px;align-items:start}
+.int-mapa.pediatria{grid-column:1/-1}
+.int-mapa-cab{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px}
+.int-mapa-conta{font-size:12px;color:var(--text-2)}
+.int-setor{margin:12px 0 6px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3)}
+.int-grade{display:grid;gap:10px}
+.int-grade.box{grid-template-columns:repeat(3,minmax(0,1fr))}
+.int-grade.cama{grid-template-columns:repeat(auto-fill,minmax(112px,1fr))}
+.internados button.int-leito{--cor:var(--ok);--cor-suave:rgba(18,163,114,.10);position:relative;display:grid;gap:2px;padding:9px 10px 8px!important;border-radius:16px!important;background:var(--cor-suave)!important;border:1.5px solid color-mix(in srgb,var(--cor) 45%,transparent)!important;color:var(--text)!important;box-shadow:none!important;font-weight:500!important;text-align:left;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease;animation:rt-pop .45s calc(var(--i,0)*45ms) cubic-bezier(.2,.9,.3,1.3) both}
+.internados button.int-leito:hover,.internados button.int-leito:focus-visible{transform:translateY(-3px);box-shadow:0 12px 26px -14px color-mix(in srgb,var(--cor) 80%,transparent)!important;filter:none}
+.internados button.int-leito.ocupado{--cor:#e5484d;--cor-suave:rgba(229,72,77,.09)}
+.internados button.int-leito.bloqueado{--cor:#8391a7;--cor-suave:rgba(131,145,167,.12)}
+.int-leito-topo{display:flex;justify-content:space-between;align-items:center}
+.int-leito-topo strong{font-size:13px;letter-spacing:.01em}
+.int-leito-dot{width:9px;height:9px;border-radius:50%;background:var(--cor);box-shadow:0 0 0 3px color-mix(in srgb,var(--cor) 22%,transparent)}
+.int-leito.ocupado.sem-evolucao .int-leito-dot{animation:rt-pulso 1.6s infinite}
+.int-desenho{width:100%;height:auto;max-height:58px}
+.int-desenho .int-colchao{fill:var(--cor)}
+.int-desenho .int-travesseiro{fill:color-mix(in srgb,var(--cor) 35%,#fff)}
+.int-desenho .int-lencol{fill:color-mix(in srgb,var(--cor) 70%,#fff)}
+.int-desenho .int-estrutura{fill:var(--text-3);stroke:var(--text-3)}
+.int-desenho .int-roda{fill:var(--text-2)}
+.int-desenho .int-grade{stroke:var(--text-3)}
+.int-leito.vago .int-colchao{fill:color-mix(in srgb,var(--cor) 55%,#fff)}
+.int-leito-rod{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:650}
+.int-dias{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11.5px;font-weight:750;background:var(--surface-3);color:var(--text-2)}
+.int-dias.ok{background:rgba(18,163,114,.12);color:var(--ok)}
+.int-dias.medio{background:rgba(229,154,26,.14);color:var(--warn-text)}
+.int-dias.alto{background:rgba(240,136,62,.18);color:#b4530b}
+.int-dias.critico{background:var(--danger);color:#fff}
+:root[data-theme="dark"] .int-dias.alto{color:#ffb27a}
+.int-evo-alerta{margin-left:auto;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--warn);color:#fff;font-size:11px;font-weight:900}
+.int-legenda{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px;color:var(--text-2);margin:-4px 0 16px}
+.int-legenda span{display:inline-flex;align-items:center;gap:6px}
+.int-legenda i{width:12px;height:12px;border-radius:4px;background:#12a372}
+.int-legenda i.ocupado{background:#e5484d}.int-legenda i.bloqueado{background:#8391a7}
+
+/* Tooltip */
+.int-tip{position:absolute;z-index:80;width:300px;max-width:calc(100vw - 24px);padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line-2);box-shadow:0 22px 50px -18px rgba(15,23,42,.45);font-size:13px;line-height:1.45;animation:rt-tip .16s ease-out;pointer-events:none}
+.int-tip p{margin:5px 0 0}
+.int-tip-cab{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+.int-tip-idade{font-weight:650}
+.int-tip-dias strong{font-size:15px}
+.int-tip-dias.critico strong,.int-tip-dias.alto strong{color:var(--danger-text)}
+.int-tip-cid{color:var(--text-2)}
+.int-tip-cid strong{color:var(--text)}
+.int-tip-obs{color:var(--text-2);font-style:italic}
+.int-tip-evo{padding:6px 8px;border-radius:8px;background:var(--surface-2);font-weight:600}
+.int-tip-evo.pendente{background:var(--warn-soft);color:var(--warn-text)}
+.int-tip-evo.em-dia{background:rgba(18,163,114,.10);color:var(--ok)}
+@keyframes rt-tip{from{opacity:0;transform:translateY(4px)}}
+
+/* Pílulas e chips */
+.int-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:750;background:var(--surface-3);color:var(--text-2)}
+.int-pill.ocupado,.int-pill.pendente{background:var(--danger-soft);color:var(--danger-text)}
+.int-pill.vago,.int-pill.em-dia{background:rgba(18,163,114,.12);color:var(--ok)}
+.int-pill.pendente{background:var(--warn-soft);color:var(--warn-text)}
+.int-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line-2);font-size:12px}
+.int-chip.box{border-color:var(--danger-line)}
+
+/* Barras (CIDs e especialidades) */
+.int-barras{display:grid;gap:9px}
+.int-barra-linha{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 28px;align-items:center;gap:10px;font-size:13px}
+.int-barra-linha .int-barra{margin:0;height:10px}
+.int-barra-linha strong{text-align:right;font-variant-numeric:tabular-nums}
+.int-barra-linha.uti .int-barra span{background:linear-gradient(90deg,#f0883e,var(--danger))}
+.int-cid-chips{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px}
+
+/* Tabela */
+.int-tabela td{vertical-align:top}
+.int-obs{max-width:280px;color:var(--text-2);font-size:12px}
+
+/* Resumo no Painel */
+.int-mini{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;padding:16px 20px;border-radius:20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);margin:0 0 16px;animation:rt-subir .5s .08s cubic-bezier(.2,.8,.2,1) both}
+.int-mini-macas{display:flex;gap:6px}
+.int-mini-maca{width:30px;height:16px;border-radius:6px;background:#12a372;box-shadow:inset 0 -4px 0 rgba(0,0,0,.12)}
+.int-mini-maca.ocupado{background:#e5484d}
+.int-mini h3{margin:0;font-size:15px}
+.int-mini p{margin:2px 0 0;font-size:13px;color:var(--text-2)}
+
+@media(max-width:1200px){.int-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.int-mapas{grid-template-columns:minmax(0,1fr)}.int-visitas{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.int-visita-lista{grid-column:1/-1}}
+@media(max-width:700px){.int-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.int-duas,.int-visitas{grid-template-columns:minmax(0,1fr)}.int-grade.box{grid-template-columns:repeat(2,minmax(0,1fr))}.int-hero h2{font-size:24px}.int-mini{grid-template-columns:minmax(0,1fr)}}
