@@ -156,3 +156,7 @@
 .int-ficha-linha li{position:relative;display:flex;gap:10px;align-items:baseline;font-size:13px}
 .int-ficha-linha li::before{content:"";position:absolute;left:-19px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .int-ficha-linha strong{font-variant-numeric:tabular-nums;min-width:86px}
+
+/* Berços da enfermaria pediátrica */
+.int-desenho .int-mobile{stroke:var(--text-3)}
+.int-desenho .int-estrela{fill:#f2bd00}

@@ -121,3 +121,39 @@ test('sugestão ignorada não volta a aparecer', () => {
  assert.deepEqual(aplicarTrocas(seed, store, NOITE, producaoNoite).suspeitas, []);
  assert.match(baseDoctor(seed, store, NOITE.data, 12), /^THAÍS KOESTER/);
 });
+
+test('troca no meio do plantão: escalado parou e alguém de fora assumiu logo depois', () => {
+ const store = new MemoryStore();
+ const postos = postosDoPlantao(seed, store, DATA, 'D');
+ const clinico = postos.find(p => p.slot === 0), ped = postos.find(p => p.slot === 4);
+ const registros = postos.filter(p => p.doctor).map(p => ({medico: nome(p.doctor), data: DATA, turno: 'D', adulto: p.area === 'adulto' ? 20 : 0, pediatria: p.area === 'pediatria' ? 20 : 0, primeiro: `${DATA}T07:10`, ultimo: `${DATA}T18:40`}));
+ // Clínico 1 atendeu só até 09h05; LILIANE (fora da escala) começou às 09h20.
+ Object.assign(registros.find(r => r.medico === nome(clinico.doctor)), {adulto: 14, ultimo: `${DATA}T09:05`});
+ registros.push({medico: 'LILIANE CRISTINA DA SILVA SOUZA', data: DATA, turno: 'D', adulto: 12, pediatria: 0, primeiro: `${DATA}T09:20`, ultimo: `${DATA}T18:30`});
+ const r = detectar(postos, registros, [], Date.parse(`${DATA}T17:00:00-04:00`));
+ assert.equal(r.automaticas.length, 1);
+ assert.deepEqual({slot: r.automaticas[0].slot, entrou: r.automaticas[0].entrou, desde: r.automaticas[0].desde, parouAs: r.automaticas[0].parouAs}, {slot: 0, entrou: 'LILIANE CRISTINA DA SILVA SOUZA', desde: '09:20', parouAs: '09:05'});
+ // Pediatra que fez só a manhã e outra que chegou à tarde (incomum, mas acontece): também é reconhecido.
+ Object.assign(registros.find(r => r.medico === nome(ped.doctor)), {pediatria: 17, ultimo: `${DATA}T12:50`});
+ registros.push({medico: 'MARIANA MENEZES RONDON', data: DATA, turno: 'D', adulto: 0, pediatria: 12, primeiro: `${DATA}T13:05`, ultimo: `${DATA}T18:50`});
+ const r2 = detectar(postos, registros, [], Date.parse(`${DATA}T19:30:00-04:00`));
+ assert.ok(r2.automaticas.some(t => t.slot === 4 && t.entrou === 'MARIANA MENEZES RONDON' && t.desde === '13:05'));
+ // Quem parou há menos de 2 h (pode estar na sala vermelha) ainda não vira troca.
+ const r3 = detectar(postos, registros, [], Date.parse(`${DATA}T10:30:00-04:00`));
+ assert.ok(!r3.automaticas.some(t => t.slot === 0));
+});
+
+test('cinderela de fora da escala não toma o posto de clínico de 12 h', () => {
+ const store = new MemoryStore();
+ const postos = postosDoPlantao(seed, store, DATA, 'D');
+ const clinico = postos.find(p => p.slot === 2);
+ const reg = (medico, adulto, primeiro, ultimo = `${DATA}T18:40`) => ({medico, data: DATA, turno: 'D', adulto, pediatria: 0, primeiro: `${DATA}T${primeiro}`, ultimo});
+ const registros = postos.filter(p => p.doctor && p.slot !== 2).map(p => ({medico: nome(p.doctor), data: DATA, turno: 'D', adulto: p.area === 'adulto' ? 20 : 0, pediatria: p.area === 'pediatria' ? 20 : 0, primeiro: `${DATA}T07:10`, ultimo: `${DATA}T18:40`}));
+ // Clínico 3 faltou; JOSÉ fez o plantão inteiro; DENIS e LUCAS chegaram ao meio-dia (cinderelas).
+ registros.push(reg('JOSE PEDRO TESTE', 30, '07:20'), reg('DENIS TESTE', 25, '12:05'), reg('LUCAS TESTE', 28, '11:10'));
+ const r = detectar(postos, registros, [], Date.parse(`${DATA}T19:30:00-04:00`), [{slot: 14, doctor: ''}, {slot: 15, doctor: ''}]);
+ const noClinico = [...r.automaticas, ...r.suspeitas.flatMap(s => s.pares)].filter(t => t.slot === clinico.slot);
+ assert.deepEqual(noClinico.map(t => t.entrou), ['JOSE PEDRO TESTE']);
+ const nasCinderelas = r.automaticas.filter(t => t.slot >= 14).map(t => t.entrou).sort();
+ assert.deepEqual(nasCinderelas, ['DENIS TESTE', 'LUCAS TESTE']);
+});

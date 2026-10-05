@@ -86,6 +86,10 @@ def resumir_producao(linhas):
             registro[chave] += 1
             classe = CLASSES_PRODUCAO.get(normalizar(classificacao), 'outros')
             registro['classes'][classe] = registro['classes'].get(classe, 0) + 1
+            # Primeira e última consulta no plantão: mostra quem parou no meio e quem assumiu depois.
+            hm = momento.strftime('%Y-%m-%dT%H:%M')
+            registro['primeiro'] = min(registro.get('primeiro') or hm, hm)
+            registro['ultimo'] = max(registro.get('ultimo') or hm, hm)
     return sorted(registros.values(), key=lambda r: (r['data'], r['turno'], r['medico']))
 
 

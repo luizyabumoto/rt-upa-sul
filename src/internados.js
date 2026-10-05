@@ -31,7 +31,9 @@ const comparaLeito = (a, b) => { const x = ordemLeito(a.leito), y = ordemLeito(b
 function desenho(tipo) {
  const s = document.createElementNS(svgNS, 'svg');
  s.setAttribute('viewBox', '0 0 120 72'); s.setAttribute('aria-hidden', 'true'); s.classList.add('int-desenho');
- s.innerHTML = tipo === 'box'
+ s.innerHTML = tipo === 'berco'
+  ? '<path class="int-mobile" d="M60 2v6M44 8h32" stroke-width="1.6" fill="none"/><path class="int-estrela" d="M44 9l1.6 3.2 3.4.5-2.5 2.4.6 3.4-3.1-1.6-3.1 1.6.6-3.4-2.5-2.4 3.4-.5zM76 9l1.6 3.2 3.4.5-2.5 2.4.6 3.4-3.1-1.6-3.1 1.6.6-3.4-2.5-2.4 3.4-.5z"/><rect class="int-colchao" x="18" y="42" width="84" height="10" rx="4"/><rect class="int-travesseiro" x="21" y="35" width="18" height="8" rx="4"/><rect class="int-lencol" x="44" y="38" width="55" height="10" rx="5"/><rect class="int-estrutura" x="12" y="24" width="96" height="4" rx="2"/><rect class="int-estrutura" x="12" y="52" width="96" height="4" rx="2"/><path class="int-estrutura" d="M24 28v24M34 28v24M44 28v24M54 28v24M64 28v24M74 28v24M84 28v24M94 28v24" stroke-width="2" fill="none" opacity=".7"/><rect class="int-estrutura" x="10" y="20" width="6" height="46" rx="3"/><rect class="int-estrutura" x="104" y="20" width="6" height="46" rx="3"/>'
+  : tipo === 'box'
   ? '<rect class="int-estrutura" x="8" y="40" width="104" height="5" rx="2"/><rect class="int-colchao" x="10" y="26" width="100" height="14" rx="6"/><rect class="int-travesseiro" x="14" y="19" width="24" height="10" rx="5"/><path class="int-estrutura" d="M20 45v14M100 45v14M60 45v10" stroke-width="4" stroke-linecap="round" fill="none"/><circle class="int-roda" cx="20" cy="63" r="5"/><circle class="int-roda" cx="100" cy="63" r="5"/><path class="int-grade" d="M44 24h56" stroke-width="3" stroke-linecap="round" fill="none"/>'
   : '<rect class="int-estrutura" x="6" y="12" width="7" height="50" rx="3"/><rect class="int-estrutura" x="107" y="30" width="7" height="32" rx="3"/><rect class="int-colchao" x="12" y="32" width="96" height="16" rx="5"/><rect class="int-travesseiro" x="16" y="24" width="26" height="11" rx="5"/><rect class="int-lencol" x="46" y="30" width="62" height="18" rx="4"/><rect class="int-estrutura" x="12" y="48" width="96" height="5" rx="2"/>';
  return s;
@@ -216,7 +218,7 @@ export function mountInternados() {
   const mapas = $('.int-mapas');
   mapas.replaceChildren();
   const ocupante = l => pacientes.find(p => p.leito === l.leito && p.categoria === l.categoria);
-  const grupos = [['box', 'Box de emergência', 'box'], ['enfermaria', 'Enfermaria adulto', 'cama'], ['pediatria', 'Enfermaria pediátrica', 'cama']];
+  const grupos = [['box', 'Box de emergência', 'box'], ['enfermaria', 'Enfermaria adulto', 'cama'], ['pediatria', 'Enfermaria pediátrica', 'berco']];
   let i = 0;
   for (const [cat, titulo, tipo] of grupos) {
    const doGrupo = leitos.filter(l => l.categoria === cat);
@@ -229,8 +231,8 @@ export function mountInternados() {
    const setores = [...new Set(doGrupo.map(l => l.setor))];
    for (const setor of setores) {
     if (setores.length > 1) sec.append(el('h4', 'int-setor', setor.replace(/^Enfermaria /i, '')));
-    const grade = el('div', `int-grade ${tipo}`);
-    for (const l of doGrupo.filter(x => x.setor === setor).sort(comparaLeito)) grade.append(leitoBotao(l, ocupante(l), tipo === 'box' ? 'box' : 'cama', i++));
+    const grade = el('div', `int-grade ${tipo === 'berco' ? 'cama' : tipo}`);
+    for (const l of doGrupo.filter(x => x.setor === setor).sort(comparaLeito)) grade.append(leitoBotao(l, ocupante(l), tipo, i++));
     sec.append(grade);
    }
    mapas.append(sec);

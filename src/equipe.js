@@ -8,7 +8,7 @@ import {escaladosComArea} from './atencao.js';
 const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
 const nome = d => String(d || '').split('\n')[0].trim();
 const tempo = min => min < 1 ? 'agora' : min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
-export const COLUNAS = [['adulto', 'Clínicos', 4], ['pediatria', 'Pediatras', 2], ['box', 'Box de emergência', 1], ['cinderela', 'Cinderelas', 2]];
+export const COLUNAS = [['adulto', 'Clínicos · 12 h', 4], ['pediatria', 'Pediatras', 2], ['cinderela', 'Cinderelas', 2], ['box', 'Box de emergência', 1]];
 
 // Coluna do médico: cinderela (diurno, começou depois das 11h) ou a área em que mais atendeu.
 export const colunaDe = m => m.cinderela && m.area !== 'box' ? 'cinderela' : m.area;
@@ -30,6 +30,8 @@ export function mountEquipeAgora(storage, seed) {
   const p = plantaoAtual();
   const lista = escaladosComArea(seed, storage, p.data, p.turno).map(m => ({nome: m.nome, area: m.area}));
   for (const slot of p.turno === 'D' ? [6] : [13]) for (const s of segments(seed, storage, p.data, slot)) if (nome(s.doctor)) lista.push({nome: nome(s.doctor), area: 'box'});
+  // Cinderelas da escala (só no diurno): quem está nelas não é "fora da escala".
+  if (p.turno === 'D') for (const slot of [14, 15]) for (const s of segments(seed, storage, p.data, slot)) if (nome(s.doctor)) lista.push({nome: nome(s.doctor), area: 'cinderela'});
   return lista;
  }
 
@@ -74,13 +76,14 @@ export function mountEquipeAgora(storage, seed) {
    const ch = el('div', 'eq-col-cab');   // div, não <header>: o estilo global do topo do site não pode pegar aqui
    ch.append(el('h3', '', titulo), el('span', `eq-conta ${ativos >= esperado ? 'ok' : ativos ? 'medio' : 'ruim'}`, `${ativos}/${esperado} atendendo`));
    col.append(ch);
-   if (!daColuna.length) col.append(el('p', 'muted eq-vazio', 'Ninguém registrou atendimento ainda.'));
    for (const m of daColuna) col.append(cartao(m, escala));
+   // A estrutura do plantão fica sempre à vista: cada vaga sem ninguém atendendo aparece tracejada.
+   for (let i = daColuna.length; i < esperado; i++) col.append(el('div', 'eq-vaga', chave === 'cinderela' && new Date().getHours() < 11 ? 'Cinderela entra às 11h/12h' : 'Vaga sem atendimento registrado'));
    grade.append(col);
   }
   host.append(grade);
   const horas = (Date.now() - Date.parse(p.inicio + ':00-04:00')) / 3600000;
-  const faltando = horas >= 1 ? semAtendimento(escala, dados.equipe || []) : [];
+  const faltando = horas >= 1 ? semAtendimento(escala.filter(e => e.area !== 'cinderela'), dados.equipe || []) : [];
   if (faltando.length) {
    const aviso = el('div', 'eq-aviso');
    aviso.append(el('strong', '', `Escalados sem nenhum atendimento: ${faltando.length}`), el('span', '', faltando.map(f => `${f.nome} (${f.area === 'box' ? 'Box' : f.area === 'pediatria' ? 'pediatria' : 'clínico'})`).join(' · ')));

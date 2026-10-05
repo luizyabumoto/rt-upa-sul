@@ -240,9 +240,9 @@ def validate_items(items):
                 raise ApiError(400, 'Histórico de trocas inválido.')
             campos = {'id', 'data', 'turno', 'slot', 'saiu', 'entrou', 'consultas', 'status', 'criadoEm'}
             for item in parsed:
-                if not isinstance(item, dict) or set(item) != campos or item['status'] not in ('aplicada', 'mantida', 'desfeita', 'ignorada') or item['turno'] not in ('D', 'N'):
+                if not isinstance(item, dict) or not campos <= set(item) or set(item) - campos - {'desde', 'parouAs'} or any(not isinstance(item.get(k, ''), str) or len(item.get(k, '')) > 20 for k in ('desde', 'parouAs')) or item['status'] not in ('aplicada', 'mantida', 'desfeita', 'ignorada') or item['turno'] not in ('D', 'N'):
                     raise ApiError(400, 'Troca inválida.')
-                if type(item['slot']) is not int or not 0 <= item['slot'] <= 13 or type(item['consultas']) is not int or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(item['data'])):
+                if type(item['slot']) is not int or not 0 <= item['slot'] <= 15 or type(item['consultas']) is not int or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(item['data'])):
                     raise ApiError(400, 'Troca inválida.')
                 if any(not isinstance(item[k], str) or len(item[k]) > 500 for k in ('id', 'saiu', 'entrou', 'criadoEm')):
                     raise ApiError(400, 'Troca inválida.')
@@ -391,7 +391,7 @@ def app(environ, start_response):
             if path in ('/icon.png', '/favicon.ico'):
                 return respond(200, base64.b64decode(arquivo('icon.png.b64')[0]), 'image/png', 'public, max-age=86400')
             return static(path.lstrip('/'), 'text/javascript; charset=utf-8' if path == '/sw.js' else 'application/manifest+json', 'no-cache')
-        if path in ('/src/dark.css', '/src/theme.css', '/src/light.css', '/src/documentos.css', '/src/internados.css', '/src/visual.css') and method == 'GET':
+        if path in ('/src/dark.css', '/src/theme.css', '/src/light.css', '/src/light-auto.css', '/src/documentos.css', '/src/internados.css', '/src/visual.css') and method == 'GET':
             return static(path.lstrip('/'), 'text/css; charset=utf-8', 'no-cache')
         if path == '/src/inter.woff2' and method == 'GET':
             return static('src/inter.woff2', 'font/woff2', 'public, max-age=604800')

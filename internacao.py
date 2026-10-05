@@ -218,7 +218,7 @@ def resumir_equipe(linhas, agora, anterior=()):
         saida.append({**m, 'area': area_do_medico(m['adulto'], m['pediatria'], m['box']), 'consultas': m['adulto'] + m['pediatria'],
                       'porHora': round((m['adulto'] + m['pediatria']) / horas, 1),
                       'ativo': agora - m['ultimo'] <= timedelta(minutes=60), 'minutosParado': max(0, round((agora - m['ultimo']).total_seconds() / 60)),
-                      'cinderela': plantao_de(m['primeiro'])[1] == 'D' and eh_cinderela(m['primeiro'], m['ultimo']) and not avulso,
+                      'cinderela': area_do_medico(m['adulto'], m['pediatria'], m['box']) == 'adulto' and plantao_de(m['primeiro'])[1] == 'D' and eh_cinderela(m['primeiro'], m['ultimo']) and not avulso,
                       'avulso': avulso, 'restoAnterior': m['medico'] in anterior and m['ultimo'] - inicio < timedelta(minutes=45),
                       'primeiro': m['primeiro'].isoformat(), 'ultimo': m['ultimo'].isoformat()})
     ordem = {'adulto': 0, 'pediatria': 1, 'box': 2}

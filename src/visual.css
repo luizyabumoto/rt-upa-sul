@@ -210,3 +210,17 @@ header.com-marca small{margin-left:50px!important}
 .eq-coluna{min-width:0}
 .eq-medico-topo{min-width:0}
 .eq-conta{white-space:nowrap}
+
+/* ---------- Modo claro: blocos do resumo de pacientes (antes cinza escuro) ---------- */
+:root[data-theme="light"] .fs-stat{background:var(--surface-2)!important;border-color:var(--line)!important}
+:root[data-theme="light"] .fs-stat strong{color:var(--text)!important}
+:root[data-theme="light"] .fs-stat.alerta{background:var(--danger-soft)!important;border-color:var(--danger-line)!important}
+:root[data-theme="light"] .fs-stat.alerta strong{color:var(--danger-text)!important}
+:root[data-theme="light"] .az-barra{background:rgba(255,255,255,.94)!important}
+:root[data-theme="light"] .prod-table tr.destaque td.strong,:root[data-theme="light"] .prod-table tr.destaque td.pos{color:var(--accent-text)!important}
+:root[data-theme="light"] .metric strong{color:var(--accent-text)!important}
+
+.eq-vaga{display:grid;place-items:center;min-height:62px;padding:10px;border-radius:14px;border:1.5px dashed var(--line-3);color:var(--text-3);font-size:12px;text-align:center}
+/* Títulos de tabela e rótulos de números: cinza discreto no claro (o gerado deixava em azul) */
+:root[data-theme="light"] .prod-table th,:root[data-theme="light"] .flow-kpi-label,:root[data-theme="light"] .resumo-label,:root[data-theme="light"] .fs-stat span,:root[data-theme="light"] .flow-summary .fs-stat span{color:var(--text-3)!important}
+:root[data-theme="light"] .flow-kpi-value,:root[data-theme="light"] .resumo-valor{color:var(--text)!important}
