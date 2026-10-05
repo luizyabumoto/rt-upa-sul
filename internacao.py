@@ -148,6 +148,31 @@ def cruzar_evolucoes(pacientes, evolucoes, agora):
     return saida
 
 
+def visita_pela_leitura_direta(pacientes, agora):
+    """A leitura direta das evoluções de cada paciente (a mesma lista do Gestor) vale mais que a ligação pela idade
+    nos relatórios de produção: a situação da visita/evolução usa a última evolução de MÉDICO daquele paciente."""
+    visita, saida = inicio_visita(agora), []
+    for p in pacientes:
+        if not p.get('resumoEm'):
+            saida.append(p)
+            continue
+        ultima = datetime.fromisoformat(p['resumoEm'])
+        ultima = ultima if ultima.tzinfo else ultima.replace(tzinfo=CUIABA)
+        prazo = agora - VALIDADE_BOX if p['categoria'] == 'box' else visita
+        recem = p['categoria'] != 'box' and p.get('internacao') == agora.date().isoformat()
+        setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
+        recentes = []
+        for r in p.get('resumoRecentes') or []:
+            m = datetime.fromisoformat(r['momento'])
+            m = m if m.tzinfo else m.replace(tzinfo=CUIABA)
+            if m >= agora - timedelta(hours=36):
+                recentes.append({'momento': m.isoformat(), 'medico': r['medico'], 'setor': setor})
+        saida.append({**p, 'evolucao': 'em-dia' if ultima >= prazo or recem else 'pendente', 'ultimaEvolucao': ultima.isoformat(),
+                      'medicoEvolucao': p.get('resumoMedico'), 'horasSemEvolucao': round((agora - ultima).total_seconds() / 3600, 1),
+                      'evolucoesRecentes': recentes or p.get('evolucoesRecentes', []), 'fonteEvolucao': 'direta'})
+    return saida
+
+
 def resumir_visitas(pacientes):
     """Quantos faltam evoluir no Box e visitar na enfermaria (inclui pediatria)."""
     def grupo(filtro):
@@ -280,7 +305,7 @@ def internados(censo, evolucoes=None, agora=None):
         pacientes = cruzar_evolucoes(pacientes, evo['evolucoes'], agora)
     if evo.get('resumos'):
         from evolucao_texto import cruzar_resumos
-        pacientes = cruzar_resumos(pacientes, evo['resumos'])
+        pacientes = visita_pela_leitura_direta(cruzar_resumos(pacientes, evo['resumos']), agora)
     # Diagnóstico da leitura do texto das evoluções (sem nenhum dado de paciente).
     rs = evo.get('resumos') or []
     diags = [r.get('diag') or {} for r in rs]

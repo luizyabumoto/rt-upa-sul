@@ -80,3 +80,27 @@ class EvolucaoTextoTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VisitaDiretaTest(unittest.TestCase):
+    def test_leitura_direta_marca_em_dia_quando_a_ligacao_pela_idade_falhou(self):
+        from datetime import datetime
+        from internacao import CUIABA, visita_pela_leitura_direta
+        agora = datetime(2026, 10, 5, 20, 0, tzinfo=CUIABA)
+        # Caso real (E3, 91 anos): os relatórios não acharam a evolução e o leito ficou "pendente";
+        # a lista de evoluções do próprio paciente tem a do médico às 08h41 de hoje.
+        p = {'leito': 'E3', 'categoria': 'enfermaria', 'idade': 91, 'internacao': '2026-09-30', 'evolucao': 'pendente',
+             'resumoEm': '2026-10-05T08:41:00', 'resumoMedico': 'MEDICO TESTE', 'resumoRecentes': [{'momento': '2026-10-05T08:41:00', 'medico': 'MEDICO TESTE'}]}
+        r = visita_pela_leitura_direta([p], agora)[0]
+        self.assertEqual(r['evolucao'], 'em-dia')
+        self.assertEqual(r['medicoEvolucao'], 'MEDICO TESTE')
+        self.assertEqual(r['fonteEvolucao'], 'direta')
+        # Evolução de ontem: continua pendente (visita do dia começa às 07h).
+        ontem = visita_pela_leitura_direta([{**p, 'resumoEm': '2026-10-04T10:00:00', 'resumoRecentes': []}], agora)[0]
+        self.assertEqual(ontem['evolucao'], 'pendente')
+
+    def test_vitais_com_sato2_e_t(self):
+        from resumo_evolucao import resumir_evolucao
+        r = resumir_evolucao('#SSVV: PA 130x100/ FC 63/ FR 19/ T 36.1/ DEXTRO 112/ SATO2 92% (EM AA)\n#HD:\nICC DESCOMPENSADA')
+        self.assertEqual(r['vitais'], {'PA': '130x100', 'FC': '63', 'FR': '19', 'SpO2': '92', 'Tax': '36.1', 'Dextro': '112'})
+        self.assertEqual(r['hipoteses'], ['Icc descompensada'])

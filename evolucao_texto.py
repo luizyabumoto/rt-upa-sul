@@ -81,23 +81,38 @@ def _data(item):
     return None
 
 
+LIGACOES = {'DA', 'DE', 'DO', 'DAS', 'DOS', 'E'}
+
+
 def _mesmo_nome(a, b):
-    ta, tb = set(normalizar(a).split()), set(normalizar(b).split())
-    return bool(ta and tb) and len(ta & tb) >= min(2, len(ta), len(tb))
-
-
-def eh_medica(item, texto, medicos=()):
-    """Evolução de médico: CBO médico, nome entre os médicos da unidade, ou roteiro médico (HD:/CD:) sem ser de outra profissão."""
-    cbos = _cbos(item)
-    nome = _nome_profissional(item)
-    descricao = normalizar(' '.join(str(item.get(k) or '') for k in item if 'hipotese' in k.lower() or 'tipo' in k.lower()))
-    if NAO_MEDICO.search(descricao) or NAO_MEDICO.search(normalizar(' '.join(cbos))):
+    """Mesma pessoa: mesmo primeiro nome e pelo menos mais um nome igual ("RAQUEL ALVES" ≠ "RAQUEL SOUZA")."""
+    ta = [x for x in normalizar(a).split() if x not in LIGACOES]
+    tb = [x for x in normalizar(b).split() if x not in LIGACOES]
+    if not ta or not tb or ta[0] != tb[0]:
         return False
-    if cbos & CBO_MEDICO:
+    return len(set(ta) & set(tb)) >= min(2, len(ta), len(tb))
+
+
+def _de_outra_profissao(item, texto=''):
+    descricao = normalizar(' '.join(str(item.get(k) or '') for k in item if 'hipotese' in k.lower() or 'tipo' in k.lower()))
+    return bool(NAO_MEDICO.search(descricao) or NAO_MEDICO.search(normalizar(' '.join(_cbos(item)))) or re.search(r'\bCOREN\b|ENFERMAGEM', _maiusculas(texto)))
+
+
+def eh_medica(item, texto, medicos=(), nao_medicos=()):
+    """Evolução de MÉDICO. Regra rígida (enfermagem também escreve "conduta"):
+    1) quem já evoluiu como enfermagem/técnico/NIR/fisio… (nao_medicos) ou texto com COREN → não;
+    2) CBO de médico no item → sim;
+    3) com a lista de médicos da produção (CBO médico, últimos dias) → só quem está nela;
+    4) sem essa lista → roteiro médico completo (HD: e CD:/CONDUTA:)."""
+    nome = _nome_profissional(item)
+    if _de_outra_profissao(item, texto) or (nome and any(_mesmo_nome(nome, n) for n in nao_medicos)):
+        return False
+    if _cbos(item) & CBO_MEDICO:
         return True
-    if nome and any(_mesmo_nome(nome, m) for m in medicos):
-        return True
-    return bool(ROTEIRO_MEDICO.search(_maiusculas(texto)))
+    if medicos:
+        return bool(nome) and any(_mesmo_nome(nome, m) for m in medicos)
+    t = _maiusculas(texto)
+    return bool(re.search(r'(^|\n)\s*#?\s*(HD|HIPOTESE DIAGNOSTICA)\s*:', t)) and bool(re.search(r'(^|\n)\s*#?\s*(CD|CONDUTA)\s*:', t))
 
 
 def evolucoes_do_paciente(cliente, paciente_id, por_pagina=15):
@@ -110,19 +125,22 @@ def evolucoes_do_paciente(cliente, paciente_id, por_pagina=15):
     return (resposta or {}).get('items') or []
 
 
-def ultima_medica(itens, medicos=()):
+def ultima_medica(itens, medicos=(), nao_medicos=()):
     """{data, medico, resumo} da evolução médica mais recente; None se não houver."""
     melhores = []
     for ordem, item in enumerate(itens):
         texto = _texto(item)
-        if texto and eh_medica(item, texto, medicos):
+        if texto and eh_medica(item, texto, medicos, nao_medicos):
             momento = _data(item)
             # Sem data, vale a ordem da lista (a API devolve da mais nova para a mais antiga).
             melhores.append(((momento.timestamp() if momento else 0, -ordem), momento, item, texto))
     if not melhores:
         return None
-    _, momento, item, texto = max(melhores, key=lambda x: x[0])
-    return {'data': momento.isoformat() if momento else None, 'medico': _nome_profissional(item), 'resumo': resumir_evolucao(texto)}
+    melhores.sort(key=lambda x: x[0], reverse=True)
+    _, momento, item, texto = melhores[0]
+    recentes = [{'momento': m.isoformat(), 'medico': _nome_profissional(i)} for _, m, i, _ in melhores[:8] if m]
+    return {'data': momento.isoformat() if momento else None, 'medico': _nome_profissional(item), 'resumo': resumir_evolucao(texto),
+            'texto': texto[:20000], 'recentes': recentes}
 
 
 def internados_na_fila(itens_fila):
@@ -140,8 +158,30 @@ def internados_na_fila(itens_fila):
     return saida
 
 
+def medicos_da_producao(cliente, dias=7):
+    """Nomes de quem atendeu como MÉDICO (CBO de clínico/pediatra) nos últimos dias: a lista que decide quem é médico.
+    Guardada por 6 h no cliente (são só nomes de profissionais)."""
+    import time
+    from datetime import datetime, timedelta
+    from gestor_saude import CUIABA
+    guardado = getattr(cliente, 'medicos_producao', None)
+    if guardado and time.time() - guardado[0] < 6 * 3600:
+        return guardado[1]
+    agora = datetime.now(CUIABA).replace(second=0, microsecond=0)
+    linhas = cliente.producao(agora - timedelta(days=dias), agora, chaves=('adulto', 'pediatria'))
+    nomes = {m for atend in linhas.values() for m, *_ in atend if m and m != 'SEM PROFISSIONAL'}
+    cliente.medicos_producao = (time.time(), nomes)
+    return nomes
+
+
 def ler_resumos(cliente, medicos=()):
     """[{setor, anos, chegada, evolucao}] de cada internado da fila (sem nenhum identificador na saída final)."""
+    medicos = set(medicos)
+    try:
+        medicos |= medicos_da_producao(cliente)
+    except (GestorSaudeError, AttributeError, TypeError):
+        pass   # sem a lista da produção, vale o CBO e o roteiro médico completo
+
     def ler():
         fila = internados_na_fila(cliente.fila())
 
@@ -153,12 +193,22 @@ def ler_resumos(cliente, medicos=()):
             except (GestorSaudeError, PermissionError) as erro:
                 return {**p, 'evolucao': None, 'diag': {'erro': str(erro) or erro.__class__.__name__}}
             com_texto = [i for i in itens if _texto(i)]
-            diag = {'itens': len(itens), 'comTexto': len(com_texto), 'medicas': sum(1 for i in com_texto if eh_medica(i, _texto(i), medicos)),
+            diag = {'itens': len(itens), 'comTexto': len(com_texto), 'medicos': len(medicos),
                     'campos': sorted(itens[0])[:60] if itens else [],
                     'camposProfissional': sorted(itens[0]['profissional'])[:40] if itens and isinstance(itens[0].get('profissional'), dict) else []}
-            return {**p, 'evolucao': ultima_medica(itens, medicos), 'diag': diag}
+            return {**p, 'itens': itens, 'diag': diag}
         with ThreadPoolExecutor(max_workers=4) as executor:
-            return list(executor.map(um, fila))
+            lidos = list(executor.map(um, fila))
+        # Quem evoluiu como enfermagem, técnico, NIR, fisio… em QUALQUER paciente não é médico em nenhum.
+        nao_medicos = {_nome_profissional(i) for r in lidos for i in r.get('itens') or [] if _de_outra_profissao(i, _texto(i)) and _nome_profissional(i)}
+        nao_medicos = {n for n in nao_medicos if not any(_mesmo_nome(n, m) for m in medicos)}
+        saida = []
+        for r in lidos:
+            itens = r.pop('itens', None) or []
+            if 'diag' in r and 'erro' not in r['diag']:
+                r['diag']['medicas'] = sum(1 for i in itens if _texto(i) and eh_medica(i, _texto(i), medicos, nao_medicos))
+            saida.append({**r, 'evolucao': ultima_medica(itens, medicos, nao_medicos) if itens else r.get('evolucao')})
+        return saida
     return cliente._com_token(ler)
 
 
@@ -176,7 +226,7 @@ def cruzar_resumos(pacientes, resumos):
         if melhor and nota(melhor) >= 2:
             livres.remove(melhor)
             e = melhor['evolucao']
-            saida.append({**p, 'resumo': e['resumo'], 'resumoEm': e['data'], 'resumoMedico': e['medico']})
+            saida.append({**p, 'resumo': e['resumo'], 'resumoEm': e['data'], 'resumoMedico': e['medico'], 'resumoRecentes': e.get('recentes', []), 'evolucaoTexto': e.get('texto', '')})
         else:
             saida.append(p)
     return saida

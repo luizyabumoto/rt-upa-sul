@@ -57,7 +57,7 @@ class ResumoEvolucaoTest(unittest.TestCase):
     def test_texto_sem_roteiro_nao_quebra(self):
         r = resumir_evolucao('Paciente estável, sem queixas. Mantém conduta.')
         self.assertEqual(r['hipoteses'], [])
-        self.assertEqual(r['frase'], '')
+        self.assertEqual(r['frase'], 'CD: Mantém conduta')   # sem roteiro, a conduta sai do texto corrido
         self.assertEqual(resumir_evolucao(None)['conduta'], [])
         self.assertEqual(secoes(''), {})
 

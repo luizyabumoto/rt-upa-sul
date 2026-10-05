@@ -21,7 +21,7 @@ SECOES = {
 }
 PENDENTE = re.compile(r'AGUARD|SOLICIT|PENDENTE|TRANSFER|PROGRAMAD|AGENDAD|VAGA|REGULA|PARECER|INTERCONSULT')
 VITAIS = [('PA', r'\bPA\s*:?\s*(\d{2,3}\s*[Xx/]\s*\d{2,3})'), ('FC', r'\bFC\s*:?\s*(\d{2,3})'), ('FR', r'\bFR\s*:?\s*(\d{1,2})'),
-          ('SpO2', r'SPO2\s*:?\s*(\d{2,3})\s*%?'), ('Tax', r'\bTAX\s*:?\s*(\d{2}[.,]\d)'), ('Dextro', r'DEXTRO\s*:?\s*(\d{2,3})')]
+          ('SpO2', r'(?:SPO2|SATO2|SAT\s?O2|\bSAT)\s*:?\s*(\d{2,3})\s*%?'), ('Tax', r'(?:\bTAX|\bTEMP|\bT)\s*:?\s*(\d{2}[.,]\d)'), ('Dextro', r'DEXTRO\s*:?\s*(\d{2,3})')]
 ATB = re.compile(r'\bD\s?(\d{1,2})\s+(?:DE\s+)?([A-ZÀ-Ü]{5,}(?:\s*\+\s*[A-ZÀ-Ü]{5,})?)')
 
 
@@ -49,10 +49,23 @@ def _itens(linhas):
     return saida
 
 
+# Título no MEIO da linha ("... AVC  CD: MANTENHO ..."): vira linha nova antes de separar as seções.
+NO_MEIO = re.compile(r'(?<=\S)\s+(?=#?\s*(?:HD|CD|CONDUTA|PLANO|HIPOTESE DIAGNOSTICA|HIPÓTESE DIAGNÓSTICA|IMPRESSAO|IMPRESSÃO|SSVV)\s*:)', re.I)
+# Sem roteiro (comum no Box): frases de conduta e de diagnóstico pelas palavras.
+VERBOS_CONDUTA = re.compile(r'\b(MANTENHO|MANTEM|SOLICITO|SOLICITADO|AGUARDO|AGUARDA|INICIO|INICIADO|INICIADA|PRESCREVO|ENCAMINHO|TRANSFIRO|TRANSFERENCIA|SUSPENDO|SUSPENSO|ACIONAD|REGULAD|PROGRAMO|REAVALIO|REAVALIAR|ALTA|OBSERVACAO|OXIGENIO|O2|IOT|INTUBAD|VM\b|DVA|NORA|ATB)')
+PALAVRAS_DIAGNOSTICO = re.compile(r'\b(QUADRO DE|DEVIDO A|DEVIDO|POR CONTA DE|SUSPEITA DE|HIPOTESE|DIAGNOSTICO|INTERNAD[OA] POR|ADMITID[OA] POR|EM INVESTIGACAO|PORTADOR[A]? DE|POS[- ]OPERATORIO|EM TRATAMENTO DE)\b')
+SINAIS_OU_EXAMES = re.compile(r'\b(PA|FC|FR|SPO2|SATO2|TAX|DEXTRO|HB|HT|LEUCO|PLAQ|CREAT|UREIA|NA|K|PCR|EAS|RX|TC)\b\s*:?\s*\d')
+
+
+def _frases(texto):
+    t = ' '.join(str(texto or '').split())
+    return [f.strip(' .;') for f in re.split(r'(?<=[.;!?])\s+|\s+//\s+|\n', t) if len(f.strip(' .;')) >= 8]
+
+
 def secoes(texto):
     """{chave: [linhas]} pelas marcações do roteiro (#TÍTULO: ou TÍTULO: no começo da linha)."""
     atual, blocos = None, {}
-    for bruta in str(texto or '').replace('\r', '').split('\n'):
+    for bruta in NO_MEIO.sub('\n', str(texto or '').replace('\r', '')).split('\n'):
         linha = bruta.strip()
         if not linha:
             continue
@@ -72,8 +85,7 @@ def secoes(texto):
             if atual == 'ssvv':
                 blocos.setdefault('ssvv', []).append(linha)
             continue
-        if atual:
-            blocos.setdefault(atual, []).append(linha)
+        blocos.setdefault(atual or 'livre', []).append(linha)
     return blocos
 
 
@@ -96,6 +108,24 @@ def resumir_evolucao(texto):
         if droga not in ('INTERNACAO',) and rotulo not in atbs:
             atbs.append(rotulo)
     estado = _frase(' '.join(b.get('evolucao', [])), 220) if b.get('evolucao') else ''
+    # Texto corrido (sem roteiro, comum no Box, ou o parágrafo antes do HD/CD): a conduta escrita nas frases
+    # (mantenho O2, aguardo vaga, solicito TC…) soma com a do "CD:"; o diagnóstico sai do trecho depois de
+    # "quadro de", "admitido por"…; e o estado geral, das primeiras frases.
+    corpo = ' '.join(b.get('evolucao', []) + b.get('livre', []))
+    frases = [f for f in _frases(corpo) if not SINAIS_OU_EXAMES.search(_sem_acento(f))]
+    if not hd:
+        for f in frases:
+            m = re.search(r'(?:QUADRO DE|ADMITID[OA] POR|INTERNAD[OA] POR|DEVIDO AO?|DEVIDO A|POR CONTA DE|SUSPEITA DE|EM TRATAMENTO DE|PORTADOR[A]? DE)\s+(.{3,90}?)(?:,|;|\.|$)', _sem_acento(f))
+            if m:
+                inicio = _sem_acento(f).find(m.group(1))
+                hd.append(f[inicio:inicio + len(m.group(1))])
+        hd = hd[:3]
+    extras = [f for f in frases if VERBOS_CONDUTA.search(_sem_acento(f)) and not PALAVRAS_DIAGNOSTICO.search(_sem_acento(f))]
+    vistos = {_sem_acento(c) for c in cd}
+    cd = (cd + [f for f in extras if _sem_acento(f) not in vistos])[:8]
+    pendencias = [c for c in cd if PENDENTE.search(_sem_acento(c))]
+    if not estado and frases:
+        estado = _frase(' '.join(f for f in frases[:2] if f not in cd), 240)
     curto = lambda xs, n: ' · '.join(_frase(x, 60) for x in xs[:n])
     linha_hd = curto(hd, 3)
     linha_cd = curto(pendencias or cd, 3)

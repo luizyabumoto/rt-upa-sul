@@ -129,19 +129,15 @@ export function mountInternados() {
    }
    evo.append(el('small', 'muted', p.resumo ? 'Resumo feito aqui no servidor a partir da última evolução de médico (enfermagem, NIR e outras profissões ficam de fora). Confira sempre no prontuário.' : 'O resumo aparece quando o site acha a última evolução de médico deste paciente no Gestor Saúde (relido a cada 10 min).'));
   }
-  if (p.resumo) {
-   const r = p.resumo, sec = el('section', 'int-ficha-resumo');
-   sec.append(el('h3', '', 'Resumo da última evolução médica'));
-   if (p.resumoEm || p.resumoMedico) sec.append(el('p', 'muted', [p.resumoEm ? `${new Date(p.resumoEm).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} ${hora(p.resumoEm)}` : '', nomeCurto(p.resumoMedico)].filter(Boolean).join(' · ')));
-   const bloco = (titulo, itens, cls = '') => { if (!itens?.length) return; sec.append(el('p', 'int-ficha-sub', titulo)); const ul = el('ul', cls); for (const x of itens) ul.append(el('li', '', x)); sec.append(ul); };
-   bloco('Hipóteses', r.hipoteses);
-   bloco('Pendente / aguardando', r.pendencias, 'pendente');
-   bloco('Conduta', r.conduta.filter(c => !r.pendencias.includes(c)));
-   if (r.antibioticos?.length) sec.append(el('p', '', `💊 ${r.antibioticos.join(' · ')}`));
-   const v = Object.entries(r.vitais || {}).map(([k, x]) => `${k} ${x}`).join(' · ');
-   if (v) sec.append(el('p', 'muted', `Sinais vitais: ${v}`));
-   if (r.comorbidades) sec.append(el('p', 'muted', `Comorbidades: ${r.comorbidades}`));
-   if (r.estado) sec.append(el('p', 'int-ficha-estado', r.estado));
+  // Evolução médica completa (a última feita por médico), como está no Gestor Saúde.
+  if (p.evolucaoTexto) {
+   const sec = el('section', 'int-ficha-resumo');
+   const cab = el('div', 'int-ficha-evo-cab');
+   cab.append(el('h3', '', 'Última evolução médica'), el('span', 'muted', [p.resumoEm ? `${new Date(p.resumoEm).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} ${hora(p.resumoEm)}` : '', nomeCurto(p.resumoMedico)].filter(Boolean).join(' · ')));
+   const copiar = el('button', 'secondary', 'Copiar'); copiar.type = 'button';
+   copiar.onclick = async () => { try { await navigator.clipboard.writeText(p.evolucaoTexto); copiar.textContent = 'Copiado ✓'; } catch { copiar.textContent = 'Não deu para copiar'; } };
+   cab.append(copiar);
+   sec.append(cab, el('div', 'int-ficha-texto', p.evolucaoTexto));
    ficha.append(sec);
   }
   ficha.append(evo);
