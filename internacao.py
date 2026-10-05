@@ -104,9 +104,10 @@ def cruzar_evolucoes(pacientes, evolucoes, agora):
         nasc, momento = date.fromisoformat(e['nascimento']), datetime.fromisoformat(e['momento'])
         p = next((x for x in pessoas if abs((x['nascimento'] - nasc).days) <= 2), None)
         if not p:
-            p = {'nascimento': nasc, 'setores': set(), 'ultima': momento, 'medico': e['medico']}
+            p = {'nascimento': nasc, 'setores': set(), 'ultima': momento, 'medico': e['medico'], 'lista': []}
             pessoas.append(p)
         p['setores'].add(e['setor'])
+        p['lista'].append({'momento': momento.isoformat(), 'medico': e['medico'], 'setor': e['setor']})
         if momento >= p['ultima']:
             p['ultima'], p['medico'] = momento, e['medico']
     livres, saida = list(pessoas), []
@@ -136,6 +137,7 @@ def cruzar_evolucoes(pacientes, evolucoes, agora):
             estado = 'pendente'
         saida.append({**p, 'evolucao': estado, 'ultimaEvolucao': par['ultima'].isoformat() if par else None,
                       'medicoEvolucao': par['medico'] if par else None,
+                      'evolucoesRecentes': sorted(par['lista'], key=lambda x: x['momento'], reverse=True)[:12] if par else [],
                       'horasSemEvolucao': round((agora - par['ultima']).total_seconds() / 3600, 1) if par else None})
     return saida
 

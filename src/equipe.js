@@ -46,7 +46,7 @@ export function mountEquipeAgora(storage, seed) {
   c.append(linha);
   const rodape = el('small', 'muted', estado === 'ativo' ? `Último atendimento ${tempo(m.minutosParado)}` : `Sem atender ${tempo(m.minutosParado).replace('há ', 'há ')}`);
   c.append(rodape);
-  if (!naEscala) c.append(el('span', 'eq-selo', 'Fora da escala'));
+  if (!naEscala) topo.append(el('span', 'eq-selo', 'Fora da escala'));
   return c;
  }
 
@@ -71,7 +71,7 @@ export function mountEquipeAgora(storage, seed) {
    const daColuna = equipe.filter(m => colunaDe(m) === chave);
    const ativos = daColuna.filter(m => m.ativo).length;
    const col = el('section', `eq-coluna ${chave}`);
-   const ch = el('header', '');
+   const ch = el('div', 'eq-col-cab');   // div, não <header>: o estilo global do topo do site não pode pegar aqui
    ch.append(el('h3', '', titulo), el('span', `eq-conta ${ativos >= esperado ? 'ok' : ativos ? 'medio' : 'ruim'}`, `${ativos}/${esperado} atendendo`));
    col.append(ch);
    if (!daColuna.length) col.append(el('p', 'muted eq-vazio', 'Ninguém registrou atendimento ainda.'));

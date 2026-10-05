@@ -54,7 +54,11 @@ export function mountInternados() {
  <section class="int-cartao int-tabela-box"></section>
  <div class="int-tip" role="tooltip" hidden></div>`;
  const $ = s => painel.querySelector(s);
+ // A dica e a ficha ficam no corpo da página (posição fixa na tela), para nunca abrirem fora da área visível.
  const tip = $('.int-tip');
+ document.body.append(tip);
+ const ficha = el('dialog', 'int-ficha');
+ document.body.append(ficha);
  let dados = null, carregando = false;
 
  // ---------- Tooltip (mouse, teclado e toque)
@@ -75,13 +79,58 @@ export function mountInternados() {
    if (p.evolucao) tip.append(el('p', `int-tip-evo ${p.evolucao}`, textoEvolucao(p)));
   } else tip.append(el('p', 'muted', leito.bloqueado ? 'Leito bloqueado na planilha.' : 'Leito livre para receber paciente.'));
   tip.hidden = false;
-  const r = alvo.getBoundingClientRect(), t = tip.getBoundingClientRect();
-  const x = Math.min(window.innerWidth - t.width - 12, Math.max(12, r.left + r.width / 2 - t.width / 2));
-  const acima = r.top - t.height - 10 > 0;
-  tip.style.left = `${x + window.scrollX}px`;
-  tip.style.top = `${(acima ? r.top - t.height - 10 : r.bottom + 10) + window.scrollY}px`;
+  const r = alvo.getBoundingClientRect(), t = tip.getBoundingClientRect(), vh = window.innerHeight, vw = window.innerWidth;
+  // Ao lado do leito quando há espaço; senão acima ou abaixo — sempre dentro da tela.
+  let x, y;
+  if (r.right + t.width + 14 <= vw) { x = r.right + 10; y = r.top + r.height / 2 - t.height / 2; }
+  else if (r.left - t.width - 14 >= 0) { x = r.left - t.width - 10; y = r.top + r.height / 2 - t.height / 2; }
+  else { x = r.left + r.width / 2 - t.width / 2; y = r.top - t.height - 10 >= 8 ? r.top - t.height - 10 : r.bottom + 10; }
+  tip.style.left = `${Math.min(vw - t.width - 8, Math.max(8, x))}px`;
+  tip.style.top = `${Math.min(vh - t.height - 8, Math.max(8, y))}px`;
  }
  const esconderTip = () => { tip.hidden = true; };
+
+ // Ficha do leito (clique): tudo o que se sabe do paciente e as evoluções médicas recentes.
+ function abrirFicha(p, leito) {
+  ficha.replaceChildren();
+  const cab = el('div', 'int-ficha-cab');
+  const tit = el('div');
+  tit.append(el('p', 'eyebrow', `${leito.categoria === 'box' ? 'BOX DE EMERGÊNCIA' : leito.setor.toUpperCase()}`), el('h2', '', `Leito ${leito.leito}`));
+  const fechar = el('button', 'secondary int-ficha-fechar', '✕'); fechar.type = 'button'; fechar.setAttribute('aria-label', 'Fechar'); fechar.onclick = () => ficha.close();
+  cab.append(tit, el('span', `int-pill ${p ? 'ocupado' : leito.bloqueado ? 'bloqueado' : 'vago'}`, p ? 'Ocupado' : leito.bloqueado ? 'Bloqueado' : 'Livre'), fechar);
+  ficha.append(cab);
+  if (!p) { ficha.append(el('p', 'muted', leito.bloqueado ? 'Leito bloqueado na planilha do NIR.' : 'Leito livre para receber paciente.')); ficha.showModal(); return; }
+  const destaque = el('div', 'int-ficha-destaque');
+  const dias = el('div', `int-ficha-dias ${faixaDias(p.dias)}`); dias.append(el('strong', '', p.dias ?? '—'), el('span', '', p.dias === 1 ? 'dia internado' : 'dias internado'));
+  const idade = el('div', 'int-ficha-idade'); idade.append(el('strong', '', p.idade ?? '—'), el('span', '', `anos${p.sexo ? ' · ' + (p.sexo === 'M' ? 'masc.' : 'fem.') : ''}`));
+  destaque.append(dias, idade);
+  ficha.append(destaque);
+  const dl = el('dl', 'int-ficha-dados');
+  const item = (rotulo, valor) => { if (!valor) return; dl.append(el('dt', '', rotulo), el('dd', '', valor)); };
+  item('Internação', p.internacao ? `desde ${p.internacao.split('-').reverse().join('/')}` : 'data não informada');
+  item('CID', p.cid ? `${p.cid}${p.cidProvavel ? ' (provável, pelo texto)' : ''}${p.capitulo ? ' · ' + p.capitulo : ''}` : 'sem CID na hipótese');
+  item('Hipótese', hipoteseSemCodigo(p.hipotese));
+  item('Aguarda', p.uti || (p.especialidade && !p.observacao ? p.especialidade.toLowerCase() : ''));
+  item('Regulação', p.especialidade && !p.observacao ? (p.regulado ? 'com número no SISREG' : 'sem número no SISREG') : '');
+  item('Observação do NIR', p.situacao);
+  ficha.append(dl);
+  const evo = el('section', `int-ficha-evo ${p.evolucao || ''}`);
+  evo.append(el('h3', '', 'Evolução médica'));
+  if (!p.evolucao) evo.append(el('p', 'muted', 'Conferência da evolução indisponível agora (Gestor Saúde).'));
+  else {
+   evo.append(el('p', `int-tip-evo ${p.evolucao}`, (p.evolucao === 'em-dia' ? '✓ Em dia · ' : p.evolucao === 'pendente' ? '⚠ Pendente · ' : '') + textoEvolucao(p)));
+   const lista = p.evolucoesRecentes || [];
+   if (lista.length) {
+    const ol = el('ol', 'int-ficha-linha');
+    for (const e of lista) { const li = el('li'); const d = new Date(e.momento); li.append(el('strong', '', `${d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} ${hora(e.momento)}`), el('span', '', nomeCurto(e.medico) || '—'), el('small', 'muted', e.setor === 'box' ? 'Box' : 'enfermaria')); ol.append(li); }
+    evo.append(el('p', 'int-ficha-sub', 'Evoluções nas últimas 36 h'), ol);
+   }
+   evo.append(el('small', 'muted', 'O texto da evolução fica no prontuário do Gestor Saúde; aqui aparecem quando e por quem foi feita. A ligação com o leito é pela idade do paciente.'));
+  }
+  ficha.append(evo);
+  ficha.showModal();
+ }
+ ficha.addEventListener('click', e => { if (e.target === ficha) ficha.close(); });
  document.addEventListener('scroll', esconderTip, {passive: true});
 
  function leitoBotao(leito, p, tipo, i) {
@@ -100,7 +149,7 @@ export function mountInternados() {
   b.append(rod);
   for (const ev of ['mouseenter', 'focus']) b.addEventListener(ev, () => mostrarTip(b, p, leito));
   for (const ev of ['mouseleave', 'blur']) b.addEventListener(ev, esconderTip);
-  b.addEventListener('click', () => (tip.hidden ? mostrarTip(b, p, leito) : esconderTip()));
+  b.addEventListener('click', () => { esconderTip(); abrirFicha(p, leito); });
   return b;
  }
 

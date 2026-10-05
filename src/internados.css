@@ -87,7 +87,7 @@
 .int-legenda i.ocupado{background:#e5484d}.int-legenda i.bloqueado{background:#8391a7}
 
 /* Tooltip */
-.int-tip{position:absolute;z-index:80;width:300px;max-width:calc(100vw - 24px);padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line-2);box-shadow:0 22px 50px -18px rgba(15,23,42,.45);font-size:13px;line-height:1.45;animation:rt-tip .16s ease-out;pointer-events:none}
+.int-tip{position:fixed;z-index:1000;width:300px;max-width:calc(100vw - 24px);padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line-2);box-shadow:0 22px 50px -18px rgba(15,23,42,.45);font-size:13px;line-height:1.45;animation:rt-tip .16s ease-out;pointer-events:none}
 .int-tip p{margin:5px 0 0}
 .int-tip-cab{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
 .int-tip-idade{font-weight:650}
@@ -99,7 +99,7 @@
 .int-tip-evo{padding:6px 8px;border-radius:8px;background:var(--surface-2);font-weight:600}
 .int-tip-evo.pendente{background:var(--warn-soft);color:var(--warn-text)}
 .int-tip-evo.em-dia{background:rgba(18,163,114,.10);color:var(--ok)}
-@keyframes rt-tip{from{opacity:0;transform:translateY(4px)}}
+@keyframes rt-tip{from{transform:translateY(4px) scale(.98)}}
 
 /* Pílulas e chips */
 .int-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:750;background:var(--surface-3);color:var(--text-2)}
@@ -131,3 +131,28 @@
 
 @media(max-width:1200px){.int-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.int-mapas{grid-template-columns:minmax(0,1fr)}.int-visitas{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.int-visita-lista{grid-column:1/-1}}
 @media(max-width:700px){.int-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.int-duas,.int-visitas{grid-template-columns:minmax(0,1fr)}.int-grade.box{grid-template-columns:repeat(2,minmax(0,1fr))}.int-hero h2{font-size:24px}.int-mini{grid-template-columns:minmax(0,1fr)}}
+
+/* Ficha do leito (clique) */
+.int-ficha{width:min(94vw,520px);max-height:88vh;overflow:auto;padding:22px 24px!important;border:1px solid var(--line-2)!important;background:var(--surface)!important;color:var(--text)!important}
+.int-ficha-cab{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.int-ficha-cab>div{flex:1}
+.int-ficha-cab h2{margin:2px 0 0;font-size:24px}
+:root[data-theme] button.int-ficha-fechar{padding:6px 10px!important;border-radius:10px!important}
+.int-ficha-destaque{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.int-ficha-destaque>div{display:grid;padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)}
+.int-ficha-destaque strong{font-size:30px;line-height:1.05;letter-spacing:-.02em}
+.int-ficha-destaque span{font-size:12px;color:var(--text-2)}
+.int-ficha-dias.alto,.int-ficha-dias.critico{background:var(--danger-soft)!important;border-color:var(--danger-line)!important}
+.int-ficha-dias.alto strong,.int-ficha-dias.critico strong{color:var(--danger-text)}
+.int-ficha-dias.medio strong{color:var(--warn-text)}
+.int-ficha-dados{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0 0 14px;font-size:13.5px}
+.int-ficha-dados dt{color:var(--text-3);font-weight:650}
+.int-ficha-dados dd{margin:0}
+.int-ficha-evo{padding:14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);display:grid;gap:8px}
+.int-ficha-evo h3{margin:0;font-size:15px}
+.int-ficha-evo .int-tip-evo{margin:0}
+.int-ficha-sub{margin:4px 0 0;font-size:11px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
+.int-ficha-linha{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--accent-line);display:grid;gap:6px}
+.int-ficha-linha li{position:relative;display:flex;gap:10px;align-items:baseline;font-size:13px}
+.int-ficha-linha li::before{content:"";position:absolute;left:-19px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.int-ficha-linha strong{font-variant-numeric:tabular-nums;min-width:86px}
