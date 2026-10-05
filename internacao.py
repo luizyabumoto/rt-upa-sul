@@ -281,6 +281,16 @@ def internados(censo, evolucoes=None, agora=None):
     if evo.get('resumos'):
         from evolucao_texto import cruzar_resumos
         pacientes = cruzar_resumos(pacientes, evo['resumos'])
+    # Diagnóstico da leitura do texto das evoluções (sem nenhum dado de paciente).
+    rs = evo.get('resumos') or []
+    diags = [r.get('diag') or {} for r in rs]
+    diagnostico = {'internadosNaFila': len(rs), 'comEvolucaoMedica': sum(1 for r in rs if r.get('evolucao')),
+                   'ligadosAoLeito': sum(1 for p in pacientes if p.get('resumo')),
+                   'evolucoesLidas': sum(d.get('itens', 0) for d in diags), 'comTexto': sum(d.get('comTexto', 0) for d in diags),
+                   'deMedico': sum(d.get('medicas', 0) for d in diags),
+                   'erros': sorted({d['erro'] for d in diags if d.get('erro')})[:3], 'erroGeral': evo.get('erroResumos'),
+                   'campos': next((d['campos'] for d in diags if d.get('campos')), []),
+                   'camposProfissional': next((d['camposProfissional'] for d in diags if d.get('camposProfissional')), [])}
     return {**dados, 'pacientes': pacientes,
-            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []), 'resumosLidos': sum(1 for r in evo.get('resumos') or [] if r.get('evolucao')), 'erroResumos': evo.get('erroResumos'),
+            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []), 'diagnostico': diagnostico,
                          'inicioVisita': inicio_visita(agora).isoformat(), **({'visitas': resumir_visitas(pacientes)} if evo['disponivel'] else {})}}

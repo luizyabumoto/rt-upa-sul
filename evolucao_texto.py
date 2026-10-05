@@ -138,10 +138,17 @@ def ler_resumos(cliente, medicos=()):
         fila = internados_na_fila(cliente.fila())
 
         def um(p):
+            # Diagnóstico sem dado de paciente: quantas evoluções vieram, quantas com texto, quantas de médico,
+            # o erro do Gestor (se houver) e só os NOMES dos campos de uma evolução.
             try:
-                return {**p, 'evolucao': ultima_medica(evolucoes_do_paciente(cliente, p['pacienteId']), medicos)}
-            except GestorSaudeError:
-                return {**p, 'evolucao': None}
+                itens = evolucoes_do_paciente(cliente, p['pacienteId'])
+            except (GestorSaudeError, PermissionError) as erro:
+                return {**p, 'evolucao': None, 'diag': {'erro': str(erro) or erro.__class__.__name__}}
+            com_texto = [i for i in itens if _texto(i)]
+            diag = {'itens': len(itens), 'comTexto': len(com_texto), 'medicas': sum(1 for i in com_texto if eh_medica(i, _texto(i), medicos)),
+                    'campos': sorted(itens[0])[:60] if itens else [],
+                    'camposProfissional': sorted(itens[0]['profissional'])[:40] if itens and isinstance(itens[0].get('profissional'), dict) else []}
+            return {**p, 'evolucao': ultima_medica(itens, medicos), 'diag': diag}
         with ThreadPoolExecutor(max_workers=4) as executor:
             return list(executor.map(um, fila))
     return cliente._com_token(ler)

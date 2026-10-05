@@ -169,3 +169,7 @@
 .int-ficha-resumo ul.pendente li{color:var(--warn-text);font-weight:650}
 .int-ficha-resumo p{margin:2px 0;font-size:13px}
 .int-ficha-estado{font-style:italic;color:var(--text-2)}
+
+.int-diag{margin:-6px 0 16px;font-size:12px;color:var(--text-3)}
+.int-diag summary{cursor:pointer}
+.int-diag pre{white-space:pre-wrap;font-size:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:300px;overflow:auto}

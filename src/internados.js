@@ -302,6 +302,16 @@ export function mountInternados() {
   }
   tabela.append(corpo);
   const wrap = el('div', 'table-wrap'); wrap.append(tabela);
+  // Diagnóstico da leitura do texto das evoluções (para ajuste fino; nenhum dado de paciente).
+  painel.querySelector('.int-diag')?.remove();
+  const dg = dados.evolucao?.diagnostico;
+  if (dg) {
+   const det = el('details', 'int-diag');
+   det.append(el('summary', '', `Leitura das evoluções no Gestor: ${dg.internadosNaFila} internados na fila · ${dg.evolucoesLidas} evoluções lidas · ${dg.deMedico} de médico · ${dg.ligadosAoLeito} ligadas a leitos`));
+   const pre = el('pre', '', JSON.stringify(dg, null, 1));
+   det.append(pre);
+   tb.after(det);
+  }
   tb.append(wrap, el('small', 'muted', '* CID provável, deduzido do texto da hipótese. Evolução: Box = nas últimas 12 h; enfermaria = desde as 07h (visita do dia). A ligação leito × evolução é pela idade do paciente.'));
  }
 
