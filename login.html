@@ -19,7 +19,8 @@ body{margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial,
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important}}
 
 /* Lado da marca */
-.marca{position:relative;overflow:hidden;color:#fff;padding:48px 56px;display:flex;flex-direction:column;justify-content:space-between;background:var(--marca);background-size:200% 200%;animation:gradiente 16s ease infinite}
+.vitrine{position:relative;overflow:hidden;color:#fff;padding:48px 56px;display:flex;flex-direction:column;justify-content:space-between;background:var(--marca);background-size:200% 200%;animation:gradiente 16s ease infinite}
+.vitrine::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.18) 1px,transparent 1.2px);background-size:22px 22px;mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 85%);-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 85%);pointer-events:none}
 .bolha{position:absolute;border-radius:50%;filter:blur(2px);background:radial-gradient(circle,rgba(255,255,255,.28),rgba(255,255,255,0) 68%);animation:flutuar 14s ease-in-out infinite}
 .bolha.b1{width:420px;height:420px;right:-120px;top:-120px}
 .bolha.b2{width:300px;height:300px;left:-80px;bottom:-60px;animation-delay:-5s;animation-duration:18s}
@@ -31,13 +32,26 @@ body{margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial,
 .chamada h1{font-size:44px;line-height:1.08;letter-spacing:-.035em;margin:0 0 16px;animation:subir .7s .1s both}
 .chamada p{font-size:16px;line-height:1.6;opacity:.92;margin:0;animation:subir .7s .2s both}
 .ecg{width:100%;max-width:520px;height:90px;margin:30px 0 10px;animation:subir .7s .25s both}
-.ecg path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:900;stroke-dashoffset:900;animation:batimento 2.8s .4s cubic-bezier(.6,.1,.2,1) forwards}
+.ecg path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:900;stroke-dashoffset:900;animation:batimento-loop 4.5s .4s cubic-bezier(.6,.1,.2,1) infinite}
+@keyframes batimento-loop{0%{stroke-dashoffset:900;opacity:1}55%{stroke-dashoffset:0;opacity:1}85%{stroke-dashoffset:0;opacity:0}100%{stroke-dashoffset:900;opacity:0}}
 .ecg path.sombra{stroke:rgba(255,255,255,.25);stroke-width:8;filter:blur(4px)}
 .recursos{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:560px}
 .recursos span{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(8px);font-size:13.5px;font-weight:600;animation:subir .6s both}
 .recursos span:nth-child(1){animation-delay:.35s}.recursos span:nth-child(2){animation-delay:.42s}.recursos span:nth-child(3){animation-delay:.49s}.recursos span:nth-child(4){animation-delay:.56s}
 .recursos svg{width:20px;height:20px;flex:none;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .rodape{position:relative;font-size:12px;opacity:.8}
+.previa{position:relative;display:flex;align-items:center;gap:16px;max-width:520px;margin-top:22px;padding:14px 18px;border-radius:18px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 24px 50px -24px rgba(0,0,0,.35);animation:subir .7s .6s both,boiar 6s 1.4s ease-in-out infinite}
+@keyframes boiar{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.previa-macas{display:grid;grid-template-columns:repeat(3,22px);gap:5px}
+.previa-macas i{height:12px;border-radius:4px;background:#ff8a8d;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
+.previa-macas i.livre{background:#5ee0b0;animation:piscar 2.4s ease-in-out infinite}
+@keyframes piscar{50%{opacity:.45}}
+.previa strong{display:block;font-size:14px}.previa span{font-size:12.5px;opacity:.88}
+.previa .ao-vivo{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;background:rgba(255,255,255,.2);font-size:11px;font-weight:800;letter-spacing:.08em}
+.previa .ao-vivo::before{content:"";width:7px;height:7px;border-radius:50%;background:#5ee0b0;animation:pulso 1.8s infinite}
+.entrada{position:relative}
+.entrada::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(47,107,255,.10) 1px,transparent 1.2px);background-size:24px 24px;mask-image:radial-gradient(circle at 50% 45%,#000,transparent 70%);-webkit-mask-image:radial-gradient(circle at 50% 45%,#000,transparent 70%);pointer-events:none}
+.cartao{position:relative}
 
 /* Lado do formulário */
 .entrada{display:grid;place-items:center;padding:40px 24px;background:radial-gradient(700px 380px at 100% 0%,rgba(47,107,255,.08),transparent 60%),radial-gradient(600px 360px at 0% 100%,rgba(19,181,177,.08),transparent 60%),#f4f6fb}
@@ -74,16 +88,16 @@ input:focus{border-color:var(--azul);background:#fff;box-shadow:0 0 0 4px rgba(4
 
 @media(max-width:900px){
  body{grid-template-columns:minmax(0,1fr)}
- .marca{padding:28px 24px 24px;min-height:auto}
+ .vitrine{padding:28px 24px 24px;min-height:auto}
  .chamada h1{font-size:30px}.chamada p{font-size:14.5px}
  .ecg{height:60px;margin:16px 0 4px}
- .recursos,.rodape{display:none}
+ .recursos,.rodape,.previa{display:none}
  .entrada{padding:24px 16px 40px;place-items:start center}
  .cartao{padding:28px 22px 24px;margin-top:-18px}
 }
 </style></head>
 <body class="login-page">
-<section class="marca" aria-hidden="false">
+<section class="vitrine">
  <span class="bolha b1"></span><span class="bolha b2"></span><span class="bolha b3"></span>
  <div class="logo"><span class="marca"><svg class="marca-svg" viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="marca-grad-l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6bff"/><stop offset=".55" stop-color="#3d8bff"/><stop offset="1" stop-color="#13b5b1"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="14" fill="url(#marca-grad-l)"/><path class="marca-cruz" d="M19.5 10.5h9v9h9v9h-9v9h-9v-9h-9v-9h9z"/><path class="marca-ecg" pathLength="100" d="M5 26.5h10l2.6-5.5 4 11 4.2-15 3.4 9.5H43"/><circle class="marca-ponto" cx="43" cy="26.5" r="1.8"/></svg></span><div>RT UPA Sul<small>Responsabilidade Técnica Médica · UPA Pascoal Ramos</small></div></div>
  <div class="chamada">
@@ -96,6 +110,7 @@ input:focus{border-color:var(--azul);background:#fff;box-shadow:0 0 0 4px rgba(4
    <span><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Produção médica</span>
    <span><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>CIs e documentos</span>
   </div>
+  <div class="previa" aria-hidden="true"><div class="previa-macas"><i></i><i></i><i></i><i></i><i></i><i class="livre"></i></div><div><strong>Box de emergência · 5/6</strong><span>Plantão diurno · 6 médicos atendendo</span></div><span class="ao-vivo">AO VIVO</span></div>
  </div>
  <p class="rodape">Prefeitura de Cuiabá · Secretaria Municipal de Saúde</p>
 </section>
