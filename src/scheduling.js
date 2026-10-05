@@ -64,15 +64,44 @@ export function recurringRule(seed,storage,date,weekday,slot,soFixo=false){
  if(index!==-1&&index<pool.length)return {doctor:pool[index],status:'custom',generic:true};
  return pinned.get(slot);
 }
-export function plannedDoctor(seed,storage,date,slot){
+// Médico previsto sem olhar férias: fixo do site, cinderela, escala importada do dia ou padrão.
+export function plannedSemFerias(seed,storage,date,slot){
  const weekday=new Date(date+'T12:00:00').getDay(),rule=recurringRule(seed,storage,date,weekday,slot);
- // Férias: o preenchimento AUTOMÁTICO (fixo, padrão, cinderela) não coloca um médico de férias — o posto
- // fica vago. Não afeta a escala importada nem edições manuais (essas ficam com alerta vermelho, sem sumir).
- const deFerias=doctor=>doctor&&vacationConflicts(storage,doctor,date,slot).length>0;
- if(rule?.status==='custom')return deFerias(rule.doctor)?'':rule.doctor;
- if(slot>=14)return deFerias(rule?.doctor)?'':(rule?.doctor||'');
+ if(rule?.status==='custom'||slot>=14)return rule?.doctor||'';
  const exact=seed.assignments.find(x=>x.date===date&&x.slot===slot);if(exact)return exact.doctor;
- return deFerias(rule?.doctor)?'':(rule?.doctor||'');
+ return rule?.doctor||'';
+}
+// Férias bloqueiam o médico em toda a escala do período (fixos, padrão e escala importada): entra o substituto
+// lançado nas férias (se ele não estiver de férias também) ou o posto fica vago. Acabou o período, volta sozinho.
+// Edições feitas à mão continuam valendo (com alerta vermelho se puserem alguém de férias).
+export function plannedDoctor(seed,storage,date,slot){
+ const doctor=plannedSemFerias(seed,storage,date,slot);
+ const ferias=doctor?vacationConflicts(storage,doctor,date,slot):[];
+ if(!ferias.length)return doctor;
+ const sub=ferias.find(f=>f.substituto)?.substituto||'';
+ return sub&&!vacationConflicts(storage,sub,date,slot).length?sub:'';
+}
+// Plantões do médico no período (pelo previsto, sem contar as férias): o que as férias vão liberar.
+export function plantoesNoPeriodo(seed,storage,doctor,inicio,fim){
+ const lista=[],id=doctorIdentity(doctor);
+ for(const d=new Date(inicio+'T12:00:00'),f=new Date(fim+'T12:00:00');d<=f;d.setDate(d.getDate()+1)){
+  const date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,edits=parse(storage,periodKey(date),{});
+  for(let slot=0;slot<16;slot++){const key=`${date}|${slot}`,quem=Object.hasOwn(edits,key)?edits[key]:plannedSemFerias(seed,storage,date,slot);if(quem&&doctorIdentity(quem)===id)lista.push({date,slot,manual:Object.hasOwn(edits,key)});}
+ }
+ return lista;
+}
+// Clínicos 1 a 4 (e noturnos 1 a 4) são o mesmo grupo: o número do posto não importa.
+// Pôr no posto A um médico que já está no posto B do mesmo turno TROCA os dois de lugar (B recebe quem
+// estava em A): nada de "horário duplicado" nem troca falsa no histórico, porque a equipe do turno é a mesma.
+export function definirPosto(seed,storage,date,slot,doctor){
+ const turn=clinicoTurnForSlot(slot),key=periodKey(date),edits=parse(storage,key,{});
+ const saiu=baseDoctor(seed,storage,date,slot);
+ const outro=turn&&doctor?CLINICO_TURNS[turn].find(s=>s!==slot&&doctorIdentity(baseDoctor(seed,storage,date,s))===doctorIdentity(doctor)):undefined;
+ edits[`${date}|${slot}`]=doctor;
+ if(outro!==undefined)edits[`${date}|${outro}`]=saiu;
+ for(const s of [slot,outro])if(s!==undefined&&edits[`${date}|${s}`]===plannedDoctor(seed,storage,date,s))delete edits[`${date}|${s}`];
+ storage.setItem('rt-upa:'+key,JSON.stringify(edits));
+ return {saiu,trocouDeLugar:outro!==undefined,outro};
 }
 export function baseDoctor(seed,storage,date,slot){const edits=parse(storage,periodKey(date),{}),key=`${date}|${slot}`;return Object.hasOwn(edits,key)?edits[key]:plannedDoctor(seed,storage,date,slot);}
 // Inclusão avulsa num turno de clínicos: o médico entra na primeira posição (1 a 4) sem médico

@@ -18,7 +18,7 @@ from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, co
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/datas.js', '/src/internados.js', '/src/equipe.js', '/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
+ASSETS = {'/src/ferias.js', '/src/datas.js', '/src/internados.js', '/src/equipe.js', '/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
@@ -173,11 +173,13 @@ def validate_items(items):
                 raise ApiError(400, 'Lista de anotações inválida.')
             seen = set()
             for item in parsed:
-                if not isinstance(item, dict) or not {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}.issubset(item) or isinstance(item,dict) and set(item)-{'id','kind','title','body','date','reminder','shift','status','doctor','cover','type','needed','endDate'}:
+                if not isinstance(item, dict) or not {'id', 'kind', 'title', 'body', 'date', 'reminder', 'shift', 'status', 'doctor', 'cover'}.issubset(item) or isinstance(item,dict) and set(item)-{'id','kind','title','body','date','reminder','shift','status','doctor','cover','type','needed','endDate','substituto'}:
                     raise ApiError(400, 'Anotação inválida.')
                 if item.get('type','Cobertura') not in ('Cobertura','Troca de plantão','Atestado / afastamento','Férias','Outro') or type(item.get('needed',1)) is not int or not 1<=item.get('needed',1)<=20:
                     raise ApiError(400,'Tipo ou quantidade de cobertura inválidos.')
                 limits = {'id': 100, 'title': 160, 'body': 10000, 'doctor': 500, 'cover': 500}
+                if not isinstance(item.get('substituto', ''), str) or len(item.get('substituto', '')) > 500:
+                    raise ApiError(400, 'Substituto das férias inválido.')
                 if any(not isinstance(item.get(k), str) or len(item[k]) > limit for k, limit in limits.items()):
                     raise ApiError(400, 'Texto de anotação inválido.')
                 if not item['id'] or item['id'] in seen or not item['title'].strip():

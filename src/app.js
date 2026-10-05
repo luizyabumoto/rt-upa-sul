@@ -4,7 +4,7 @@ import {mountQuickView} from './quick-view.js';
 import {mountPdf} from './pdf.js';
 import {mountRoster} from './roster.js';
 import {mountScheduleView} from './schedule-view.js';
-import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor,clinicoOccupancy} from './scheduling.js';
+import {overlapIndex,overlapMessage,segments,baseDoctor,plannedDoctor,affiliationClass,vacationConflicts,vacationMessage,periodReview,slots,canonicalizeStorage,doctorChoices,doctorOptions,canonicalDoctor,clinicoOccupancy,definirPosto} from './scheduling.js';
 import {mountPush} from './push.js';
 import {mountOrganizer} from './organizer.js';
 import {mountFlow} from './flow.js';
@@ -24,6 +24,7 @@ import {mountInternados} from './internados.js';
 import {mountEquipeAgora} from './equipe.js';
 import {mountTopo} from './topo.js';
 import {mountDatasBR} from './datas.js';
+import {mountFerias} from './ferias.js';
 import {fortnight, WEEKDAYS, nomeArquivo} from './calendar.js';
 import {connectStore} from './online-store.js';
 // A escala-base é pedida junto com a sessão e os dados (antes vinha só depois, uma ida a mais ao servidor).
@@ -80,7 +81,7 @@ function render(){let days;try{days=fortnight(Number(document.querySelector('#ye
  slotNames.slice(0,14).forEach((name,slot)=>{const row=document.createElement('tr');const title=document.createElement('td');title.textContent=name+(slot<7?" · 07h–19h · 12h":" · 19h–07h · 12h");row.append(title);
  for(const day of days){const td=document.createElement('td');const key=`${day.date}|${slot}`;const base=baseline(day.date,slot,day.weekday);const selected=Object.hasOwn(edits,key)?edits[key]:base;if(selected!==base){td.classList.add('changed');changed++}if(!selected)td.classList.add('empty');const select=document.createElement('select');select.setAttribute('aria-label',`${name} em ${day.date}`);
  const options=['',...doctorOptions(doctors().slice(1),selected)];for(const doctor of options)select.add(new Option((vacationConflicts(storage,doctor,day.date,slot).length?'⚠ EM FÉRIAS · ':'')+label(doctor),doctor));select.value=selected;
- select.addEventListener('change',()=>{registrarTroca(storage,{data:day.date,slot,saiu:selected,entrou:select.value});const update=get(storageKey(),{});if(select.value===base)delete update[key];else update[key]=select.value;put(storageKey(),update);document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(select);
+ select.addEventListener('change',()=>{const r=definirPosto(seed,storage,day.date,slot,select.value);if(!r.trocouDeLugar)registrarTroca(storage,{data:day.date,slot,saiu:selected,entrou:select.value});document.dispatchEvent(new Event('rt-schedule-changed'))});td.append(select);
  const covers=segments(seed,storage,day.date,slot).filter(x=>x.coverage);if(covers.length){if(selected===base)changed++;select.value=covers[0].doctor;select.disabled=true;const note=document.createElement('small');note.textContent='Cobertura: '+covers.map(x=>x.doctor.replaceAll('\n',' · ')).join(' / ');td.append(note);td.classList.add('changed');}
  if(segments(seed,storage,day.date,slot).some(s=>s.doctor&&absences.some(a=>a.doctor===s.doctor&&a.start<=day.date&&day.date<=a.end))){td.style.outline='2px solid #d34c4c';const message=document.createElement('small');message.textContent='Afastamento cadastrado';td.append(message);alerts++}
  for(const seg of segments(seed,storage,day.date,slot)){for(const leave of vacationConflicts(storage,seg.doctor,day.date,slot)){td.classList.add('vacation-conflict');const warning=document.createElement('small');warning.className='vacation-warning';warning.textContent=vacationMessage(leave);td.append(warning);alerts++;}}
@@ -142,6 +143,7 @@ try{mountEquipeAgora(storage,seed);}catch(error){console.error('Equipe agora',er
 try{mountTopo();}catch(error){console.error('Tema e impressão',error);}
 try{mountDatasBR();}catch(error){console.error('Datas',error);}
 mountScheduleView(storage,seed);
+try{mountFerias(storage,seed);}catch(error){console.error('Férias',error);}
 mountRoster(storage,seed);
 mountPdf(storage);
 mountQuickView(storage,seed);
