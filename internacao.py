@@ -175,7 +175,17 @@ class PainelInternacao:
                 except GestorSaudeError as erro:
                     self.erro = str(erro)
                 self.lido = self.relogio()
-            return {'disponivel': self.erro is None and self.ultimo is not None, 'erro': self.erro, **(self.ultimo or {'tipos': [], 'evolucoes': []})}
+            # Resumo do texto das evoluções: a cada 10 min (um pedido por internado no Gestor Saúde).
+            if self.ultimo is not None and self.relogio() - getattr(self, 'resumos_lidos', 0) >= 600:
+                from evolucao_texto import ler_resumos
+                medicos = {e['medico'] for e in self.ultimo.get('evolucoes', []) if e.get('medico')}
+                try:
+                    self.resumos, self.erro_resumos = ler_resumos(self.cliente, medicos), None
+                except (GestorSaudeError, KeyError, TypeError, ValueError, AttributeError) as erro:   # formato inesperado não derruba a aba
+                    self.erro_resumos = str(erro)
+                self.resumos_lidos = self.relogio()
+            return {'disponivel': self.erro is None and self.ultimo is not None, 'erro': self.erro, **(self.ultimo or {'tipos': [], 'evolucoes': []}),
+                    'resumos': getattr(self, 'resumos', []), 'erroResumos': getattr(self, 'erro_resumos', None)}
 
 
 # ---------- Quem está de plantão agora, pela produção
@@ -268,6 +278,9 @@ def internados(censo, evolucoes=None, agora=None):
     pacientes = dados.get('pacientes') or []
     if evo['disponivel']:
         pacientes = cruzar_evolucoes(pacientes, evo['evolucoes'], agora)
+    if evo.get('resumos'):
+        from evolucao_texto import cruzar_resumos
+        pacientes = cruzar_resumos(pacientes, evo['resumos'])
     return {**dados, 'pacientes': pacientes,
-            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []),
+            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []), 'resumosLidos': sum(1 for r in evo.get('resumos') or [] if r.get('evolucao')), 'erroResumos': evo.get('erroResumos'),
                          'inicioVisita': inicio_visita(agora).isoformat(), **({'visitas': resumir_visitas(pacientes)} if evo['disponivel'] else {})}}

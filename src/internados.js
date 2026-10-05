@@ -131,7 +131,8 @@ export function mountInternados() {
   }
   if (p.resumo) {
    const r = p.resumo, sec = el('section', 'int-ficha-resumo');
-   sec.append(el('h3', '', 'Resumo da última evolução'));
+   sec.append(el('h3', '', 'Resumo da última evolução médica'));
+   if (p.resumoEm || p.resumoMedico) sec.append(el('p', 'muted', [p.resumoEm ? `${new Date(p.resumoEm).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} ${hora(p.resumoEm)}` : '', nomeCurto(p.resumoMedico)].filter(Boolean).join(' · ')));
    const bloco = (titulo, itens, cls = '') => { if (!itens?.length) return; sec.append(el('p', 'int-ficha-sub', titulo)); const ul = el('ul', cls); for (const x of itens) ul.append(el('li', '', x)); sec.append(ul); };
    bloco('Hipóteses', r.hipoteses);
    bloco('Pendente / aguardando', r.pendencias, 'pendente');
