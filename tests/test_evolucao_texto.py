@@ -55,6 +55,25 @@ class EvolucaoTextoTest(unittest.TestCase):
         self.assertNotIn('resumo', r['F2'])
         self.assertNotIn('pacienteId', r['M1'])
 
+    def test_formato_real_do_gestor(self):
+        # Campos confirmados no diagnóstico de 05/10/2026: data, dataEvolucao, evolucao, hipotese,
+        # pacienteAtendimentoEvolucaoId e profisionalResponsavel (com um "s" só, como vem do Gestor).
+        itens = [
+            {'pacienteAtendimentoEvolucaoId': 9, 'data': None, 'dataEvolucao': '2026-10-05T18:00:00', 'hipotese': 'EVOLUÇÃO - ENFERMEIRO',
+             'evolucao': ENFERMAGEM, 'profisionalResponsavel': 'CARLA ENFERMEIRA TESTE'},
+            {'pacienteAtendimentoEvolucaoId': 8, 'data': None, 'dataEvolucao': '2026-10-05T16:00:00', 'hipotese': 'EVOLUÇÃO - NIR',
+             'evolucao': '<p>PACIENTE EVOLUIDO NO SISREG, AGUARDANDO VAGA. CONTATO COM A CENTRAL REALIZADO.</p>', 'profisionalResponsavel': 'NIR TESTE'},
+            {'pacienteAtendimentoEvolucaoId': 7, 'data': None, 'dataEvolucao': '2026-10-05T10:45:00', 'hipotese': 'EVOLUÇÃO DIARIA',
+             'evolucao': MEDICA, 'profisionalResponsavel': 'LUIZ FERNANDO TESTE'},
+        ]
+        e = ultima_medica(itens)
+        self.assertEqual(e['medico'], 'LUIZ FERNANDO TESTE')
+        self.assertEqual(e['data'][:16], '2026-10-05T10:45')
+        self.assertEqual(e['resumo']['hipoteses'], ['Pneumonia', 'Dpoc'])
+        # Médico da unidade reconhecido pelo nome mesmo sem o roteiro HD/CD.
+        curto = {'dataEvolucao': '2026-10-05T19:00:00', 'hipotese': 'PIELONEFRITE', 'evolucao': '<p>PACIENTE ESTÁVEL, SEM QUEIXAS, MANTÉM CONDUTA E ANTIBIOTICOTERAPIA.</p>', 'profisionalResponsavel': 'LORENI MEDICA TESTE'}
+        self.assertEqual(ultima_medica([curto] + itens, medicos={'LORENI MEDICA TESTE'})['medico'], 'LORENI MEDICA TESTE')
+
     def test_fila_so_internados(self):
         self.assertEqual([p['anos'] for p in internados_na_fila(Cliente().fila())], [68])
 

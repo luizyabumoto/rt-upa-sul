@@ -127,7 +127,7 @@ export function mountInternados() {
     for (const e of lista) { const li = el('li'); const d = new Date(e.momento); li.append(el('strong', '', `${d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} ${hora(e.momento)}`), el('span', '', nomeCurto(e.medico) || '—'), el('small', 'muted', e.setor === 'box' ? 'Box' : 'enfermaria')); ol.append(li); }
     evo.append(el('p', 'int-ficha-sub', 'Evoluções nas últimas 36 h'), ol);
    }
-   evo.append(el('small', 'muted', 'O texto da evolução fica no prontuário do Gestor Saúde; aqui aparecem quando e por quem foi feita. A ligação com o leito é pela idade do paciente.'));
+   evo.append(el('small', 'muted', p.resumo ? 'Resumo feito aqui no servidor a partir da última evolução de médico (enfermagem, NIR e outras profissões ficam de fora). Confira sempre no prontuário.' : 'O resumo aparece quando o site acha a última evolução de médico deste paciente no Gestor Saúde (relido a cada 10 min).'));
   }
   if (p.resumo) {
    const r = p.resumo, sec = el('section', 'int-ficha-resumo');

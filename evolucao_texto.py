@@ -31,6 +31,12 @@ def texto_de_html(valor):
     return re.sub(r'\n\s*\n+', '\n', html.unescape(t)).strip()
 
 
+def _maiusculas(texto):
+    """Sem acento e em maiúsculas, mantendo as quebras de linha (normalizar() junta tudo numa linha só)."""
+    import unicodedata
+    return unicodedata.normalize('NFD', str(texto or '')).encode('ascii', 'ignore').decode().upper()
+
+
 def _nome_profissional(item):
     p = item.get('profissional')
     if isinstance(p, dict):
@@ -40,8 +46,10 @@ def _nome_profissional(item):
         pessoa = p.get('pessoa')
         if isinstance(pessoa, dict) and isinstance(pessoa.get('nome'), str):
             return pessoa['nome'].strip()
+    # O Gestor devolve o nome em "profisionalResponsavel" (assim mesmo, com um "s"): aceita as duas grafias.
     for chave, v in item.items():
-        if isinstance(v, str) and 'profissional' in chave.lower() and 'nome' in chave.lower() and v.strip():
+        k = chave.lower()
+        if isinstance(v, str) and v.strip() and ('profis' in k or 'responsavel' in k) and not k.endswith('id'):
             return v.strip()
     return str(p).strip() if isinstance(p, str) else ''
 
@@ -89,7 +97,7 @@ def eh_medica(item, texto, medicos=()):
         return True
     if nome and any(_mesmo_nome(nome, m) for m in medicos):
         return True
-    return bool(ROTEIRO_MEDICO.search(normalizar(texto)))
+    return bool(ROTEIRO_MEDICO.search(_maiusculas(texto)))
 
 
 def evolucoes_do_paciente(cliente, paciente_id, por_pagina=15):
