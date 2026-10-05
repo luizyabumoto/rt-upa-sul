@@ -83,7 +83,13 @@ def ler_evolucoes(cliente, inicio, fim):
             return saida
         with ThreadPoolExecutor(max_workers=max(1, min(4, len(tipos)))) as executor:
             evolucoes = [e for lista in executor.map(baixar, tipos) for e in lista]
-        return {'tipos': sorted({nome for _, nome, _, _ in tipos}), 'evolucoes': sorted(evolucoes, key=lambda e: e['momento'])}
+        campos_fila = []
+        try:
+            internados_fila = [i for i in cliente.fila() if any(p in normalizar(i.get('atendimentoTipo')) for p in ('ENFERMARIA', 'BOX', 'OBSERVACAO'))]
+            campos_fila = sorted({k for i in internados_fila[:5] for k in i})   # só os nomes dos campos, nunca os valores
+        except GestorSaudeError:
+            pass
+        return {'tipos': sorted({nome for _, nome, _, _ in tipos}), 'evolucoes': sorted(evolucoes, key=lambda e: e['momento']), 'camposFila': campos_fila}
     return cliente._com_token(ler)
 
 
@@ -263,5 +269,5 @@ def internados(censo, evolucoes=None, agora=None):
     if evo['disponivel']:
         pacientes = cruzar_evolucoes(pacientes, evo['evolucoes'], agora)
     return {**dados, 'pacientes': pacientes,
-            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []),
+            'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []),
                          'inicioVisita': inicio_visita(agora).isoformat(), **({'visitas': resumir_visitas(pacientes)} if evo['disponivel'] else {})}}

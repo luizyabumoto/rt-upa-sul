@@ -129,6 +129,20 @@ export function mountInternados() {
    }
    evo.append(el('small', 'muted', 'O texto da evolução fica no prontuário do Gestor Saúde; aqui aparecem quando e por quem foi feita. A ligação com o leito é pela idade do paciente.'));
   }
+  if (p.resumo) {
+   const r = p.resumo, sec = el('section', 'int-ficha-resumo');
+   sec.append(el('h3', '', 'Resumo da última evolução'));
+   const bloco = (titulo, itens, cls = '') => { if (!itens?.length) return; sec.append(el('p', 'int-ficha-sub', titulo)); const ul = el('ul', cls); for (const x of itens) ul.append(el('li', '', x)); sec.append(ul); };
+   bloco('Hipóteses', r.hipoteses);
+   bloco('Pendente / aguardando', r.pendencias, 'pendente');
+   bloco('Conduta', r.conduta.filter(c => !r.pendencias.includes(c)));
+   if (r.antibioticos?.length) sec.append(el('p', '', `💊 ${r.antibioticos.join(' · ')}`));
+   const v = Object.entries(r.vitais || {}).map(([k, x]) => `${k} ${x}`).join(' · ');
+   if (v) sec.append(el('p', 'muted', `Sinais vitais: ${v}`));
+   if (r.comorbidades) sec.append(el('p', 'muted', `Comorbidades: ${r.comorbidades}`));
+   if (r.estado) sec.append(el('p', 'int-ficha-estado', r.estado));
+   ficha.append(sec);
+  }
   ficha.append(evo);
   ficha.showModal();
  }
@@ -149,6 +163,7 @@ export function mountInternados() {
    if (p.evolucao === 'pendente') rod.append(el('span', 'int-evo-alerta', '!'));
   } else rod.append(el('span', 'muted', leito.bloqueado ? 'bloqueado' : 'livre'));
   b.append(rod);
+  if (p?.resumo?.frase) { b.classList.add('com-resumo'); b.append(el('span', 'int-leito-resumo', p.resumo.hipoteses?.[0] || p.resumo.frase)); }
   for (const ev of ['mouseenter', 'focus']) b.addEventListener(ev, () => mostrarTip(b, p, leito));
   for (const ev of ['mouseleave', 'blur']) b.addEventListener(ev, esconderTip);
   b.addEventListener('click', () => { esconderTip(); abrirFicha(p, leito); });
