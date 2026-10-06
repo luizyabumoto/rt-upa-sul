@@ -134,3 +134,12 @@ class LigacaoTest(unittest.TestCase):
         r = cruzar_resumos(pacientes, [{'setor': 'enfermaria', 'anos': 91, 'chegada': '2026-10-03', 'evolucao': evo}])
         self.assertEqual(r[0].get('resumoMedico'), 'DR THIAGO TESTE')
         self.assertNotIn('resumoMedico', r[1])
+
+    def test_nome_decide_a_ligacao(self):
+        evo = lambda medico: {'data': '2026-10-05T09:00:00', 'medico': medico, 'resumo': {}, 'texto': 'x'}
+        pacientes = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 47, 'internacao': '2026-09-28', '_nome': 'ANA PAULA TESTE SOUZA'},
+                     {'leito': 'F4', 'categoria': 'enfermaria', 'idade': 47, 'internacao': '2026-09-28', '_nome': 'BEATRIZ TESTE LIMA'}]
+        resumos = [{'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'BEATRIZ TESTE LIMA', 'evolucao': evo('DRA DA BEATRIZ')},
+                   {'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'ANA PAULA DE TESTE SOUZA', 'evolucao': evo('DRA DA ANA')}]
+        r = {p['leito']: p.get('resumoMedico') for p in cruzar_resumos(pacientes, resumos)}
+        self.assertEqual(r, {'F3': 'DRA DA ANA', 'F4': 'DRA DA BEATRIZ'})

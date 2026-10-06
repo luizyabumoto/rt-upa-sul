@@ -188,7 +188,12 @@ def ler_unidade(linhas, hoje):
         setor_n = normalizar(secao)
         especialidade = pega('especialidade')[:60]
         observacao = normalizar(pega('hipotese')) in ('OBSERVACAO', 'EM OBSERVACAO') or normalizar(especialidade) == 'OBSERVACAO'
+        nome_completo = ' '.join(normalizar(pega('nome')).split())
         pacientes.append({
+            # Primeiro nome na tela (pedido do RT, acesso só de contas autorizadas). O nome completo fica só no
+            # servidor (_nome) para ligar o leito ao paciente do Gestor Saúde e é retirado antes da resposta.
+            'primeiroNome': nome_completo.split()[0].title() if nome_completo and situacao_leito(nome_completo) == 'ocupado' else '',
+            '_nome': nome_completo,
             'categoria': cat, 'setor': secao.title(), 'leito': leito, 'isolamento': isolamento,
             'sexo': 'M' if 'MASC' in setor_n else 'F' if 'FEMI' in setor_n else '',
             'idade': _idade(pega('idade')), 'internacao': internado.isoformat() if internado else None, 'dias': dias,

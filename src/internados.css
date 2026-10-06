@@ -180,3 +180,4 @@
 .int-ficha-evo-cab .muted{flex:1}
 :root[data-theme] .int-ficha-evo-cab button{padding:5px 12px!important;font-size:12px!important}
 .int-ficha-texto{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;max-height:56vh;overflow:auto;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--line);font-family:inherit}
+.int-leito-nome{font-size:12px;font-weight:700;color:var(--text);margin-top:-2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

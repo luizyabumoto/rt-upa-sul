@@ -153,7 +153,9 @@ def internados_na_fila(itens_fila):
         idade = str(i.get('idadeMeses') or i.get('idade') or '')
         anos = re.match(r'\s*(\d+)\s*ano', idade)
         chegada = _horario(i.get('chegada'))
-        saida.append({'pacienteId': i['pacienteId'], 'setor': 'box' if 'BOX' in tipo else 'enfermaria',
+        pac = i.get('paciente') if isinstance(i.get('paciente'), dict) else {}
+        nome = next((str(v) for v in (i.get('pacienteNome'), i.get('nome'), i.get('nomePaciente'), pac.get('nome'), pac.get('nomeCompleto'), pac.get('pessoaNome')) if v), '')
+        saida.append({'pacienteId': i['pacienteId'], 'setor': 'box' if 'BOX' in tipo else 'enfermaria', '_nome': ' '.join(normalizar(nome).split()),
                       'anos': int(anos.group(1)) if anos else None, 'chegada': chegada.date().isoformat() if chegada else None})
     return saida
 
@@ -232,6 +234,13 @@ def _nota_ligacao(p, r, unico=False):
     Idade igual +2, mesmo setor +1, mesma data de internação +4 (±1 dia +2), idade sem nenhum vizinho no censo +2.
     Data diferente NÃO pesa contra: quem passa do Box para a enfermaria ganha atendimento novo no Gestor."""
     from datetime import date
+    # Nome dos dois lados (planilha e Gestor): decide sozinho. Mesmo nome = é ele; nome diferente = não é.
+    if p.get('_nome') and r.get('_nome'):
+        a = [x for x in p['_nome'].split() if x not in LIGACOES]
+        b = [x for x in r['_nome'].split() if x not in LIGACOES]
+        if a and b and (a == b or (a[0] == b[0] and a[-1] == b[-1]) or (a[0] == b[0] and len(set(a) & set(b)) >= 3)):
+            return 50
+        return -1
     if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
         return -1
     nota = 2 if r['anos'] == p['idade'] else 0

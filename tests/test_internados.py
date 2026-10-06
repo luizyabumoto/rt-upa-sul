@@ -33,10 +33,17 @@ class CensoTest(unittest.TestCase):
     def setUp(self):
         self.dados = censo.resumir(censo.ler_csv(CSV), AGORA)
 
-    def test_nunca_devolve_identificacao(self):
-        texto = json.dumps(self.dados, ensure_ascii=False)
-        for proibido in ('FULANO', 'BELTRANA', 'CICLANO', '111.222.333-44', '700000000000001', '1958', '123456789', 'ALGUEM'):
+    def test_tela_recebe_so_o_primeiro_nome(self):
+        # O que vai para o navegador (internados): primeiro nome sim; sobrenome, CPF, CNS, nascimento e SISREG nunca.
+        class Fixo:
+            def __init__(self, dados): self.dados = dados
+            def obter(self): return {'disponivel': True, 'erro': None, 'lidoEm': None, **self.dados}
+        texto = json.dumps(internacao.internados(Fixo(self.dados), agora=AGORA), ensure_ascii=False)
+        for proibido in ('DE TAL', 'SILVA', '111.222.333-44', '700000000000001', '1958', '123456789', 'ALGUEM', '_nome'):
             self.assertNotIn(proibido, texto)
+        nomes = {p['leito']: p['primeiroNome'] for p in json.loads(texto)['pacientes']}
+        self.assertEqual(nomes['M1'], 'Fulano')
+        self.assertEqual(nomes['BX2'], '')   # leito sem nome na planilha
 
     def test_leitos_e_ocupacao(self):
         r = self.dados['resumo']

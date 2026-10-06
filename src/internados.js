@@ -67,7 +67,7 @@ export function mountInternados() {
  function mostrarTip(alvo, p, leito) {
   tip.replaceChildren();
   const cab = el('div', 'int-tip-cab');
-  cab.append(el('strong', '', `Leito ${leito.leito}`), el('span', `int-pill ${p ? 'ocupado' : leito.bloqueado ? 'bloqueado' : 'vago'}`, p ? 'Ocupado' : leito.bloqueado ? 'Bloqueado' : 'Vago'));
+  cab.append(el('strong', '', `Leito ${leito.leito}${p?.primeiroNome ? ' · ' + p.primeiroNome : ''}`), el('span', `int-pill ${p ? 'ocupado' : leito.bloqueado ? 'bloqueado' : 'vago'}`, p ? 'Ocupado' : leito.bloqueado ? 'Bloqueado' : 'Vago'));
   tip.append(cab);
   if (p) {
    tip.append(el('p', 'int-tip-idade', `${p.idade !== null ? p.idade + ' anos' : 'Idade não informada'}${p.sexo ? ' · ' + (p.sexo === 'M' ? 'masculino' : 'feminino') : ''}`));
@@ -97,7 +97,7 @@ export function mountInternados() {
   ficha.replaceChildren();
   const cab = el('div', 'int-ficha-cab');
   const tit = el('div');
-  tit.append(el('p', 'eyebrow', `${leito.categoria === 'box' ? 'BOX DE EMERGÊNCIA' : leito.setor.toUpperCase()}`), el('h2', '', `Leito ${leito.leito}`));
+  tit.append(el('p', 'eyebrow', `${leito.categoria === 'box' ? 'BOX DE EMERGÊNCIA' : leito.setor.toUpperCase()}`), el('h2', '', `Leito ${leito.leito}${p?.primeiroNome ? ' · ' + p.primeiroNome : ''}`));
   const fechar = el('button', 'secondary int-ficha-fechar', '✕'); fechar.type = 'button'; fechar.setAttribute('aria-label', 'Fechar'); fechar.onclick = () => ficha.close();
   cab.append(tit, el('span', `int-pill ${p ? 'ocupado' : leito.bloqueado ? 'bloqueado' : 'vago'}`, p ? 'Ocupado' : leito.bloqueado ? 'Bloqueado' : 'Livre'), fechar);
   ficha.append(cab);
@@ -153,7 +153,9 @@ export function mountInternados() {
   b.setAttribute('aria-label', p ? `Leito ${leito.leito}, ocupado, ${p.idade ?? '?'} anos, ${textoDias(p.dias)}${p.cid ? ', CID ' + p.cid : ''}` : `Leito ${leito.leito}, ${leito.bloqueado ? 'bloqueado' : 'vago'}`);
   const topo = el('span', 'int-leito-topo');
   topo.append(el('strong', '', leito.leito), el('span', 'int-leito-dot'));
-  b.append(topo, desenho(tipo));
+  b.append(topo);
+  if (p?.primeiroNome) b.append(el('span', 'int-leito-nome', p.primeiroNome));
+  b.append(desenho(tipo));
   const rod = el('span', 'int-leito-rod');
   if (p) {
    rod.append(el('span', '', p.idade !== null ? `${p.idade}a` : '—'), el('span', `int-dias ${faixaDias(p.dias)}`, p.dias === null ? '?' : `${p.dias}d`));
@@ -218,7 +220,7 @@ export function mountInternados() {
    const lista = el('div', 'int-visita-lista');
    lista.append(el('span', 'int-kpi-rotulo', 'SEM EVOLUÇÃO'));
    if (!pend.length) lista.append(el('p', 'muted', 'Todos os leitos com evolução em dia.'));
-   for (const p of pend) { const chip = el('span', `int-chip ${p.categoria === 'box' ? 'box' : ''}`); chip.append(el('strong', '', p.leito), document.createTextNode(` ${p.idade ?? '?'}a · ${p.ultimaEvolucao ? `há ${Math.round(p.horasSemEvolucao)} h` : 'sem evolução'}`)); lista.append(chip); }
+   for (const p of pend) { const chip = el('span', `int-chip ${p.categoria === 'box' ? 'box' : ''}`); chip.append(el('strong', '', p.leito), document.createTextNode(`${p.primeiroNome ? ' ' + p.primeiroNome : ''} ${p.idade ?? '?'}a · ${p.ultimaEvolucao ? `há ${Math.round(p.horasSemEvolucao)} h` : 'sem evolução'}`)); lista.append(chip); }
    vis.append(cartao('VISITA DA ENFERMARIA', evo.visitas.enfermaria, `visitados desde as 07h`), cartao('EVOLUÇÃO DO BOX', evo.visitas.box, 'evoluídos nas últimas 12 h'), lista);
   } else {
    const aviso = el('div', 'int-visita indisponivel');
@@ -288,7 +290,7 @@ export function mountInternados() {
   const corpo = el('tbody');
   for (const p of [...pacientes].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1))) {
    const tr = el('tr');
-   const leito = el('td'); leito.append(el('strong', '', p.leito), el('small', 'muted', ` ${p.categoria === 'box' ? 'Box' : p.setor.replace(/^Enfermaria /i, '')}`));
+   const leito = el('td'); leito.append(el('strong', '', p.leito + (p.primeiroNome ? ` · ${p.primeiroNome}` : '')), el('small', 'muted', ` ${p.categoria === 'box' ? 'Box' : p.setor.replace(/^Enfermaria /i, '')}`));
    const dias = el('td', 'num'); dias.append(el('span', `int-dias ${faixaDias(p.dias)}`, textoDias(p.dias)));
    const cid = el('td'); if (p.cid) cid.append(el('strong', '', p.cid + (p.cidProvavel ? '*' : '') + ' ')); cid.append(document.createTextNode(hipoteseSemCodigo(p.hipotese) || '—'));
    const ev = el('td'); ev.append(el('span', `int-pill ${p.evolucao || 'neutro'}`, p.evolucao === 'em-dia' ? 'Em dia' : p.evolucao === 'pendente' ? 'Pendente' : p.evolucao === 'sem-idade' ? 'Sem idade' : '—'));
