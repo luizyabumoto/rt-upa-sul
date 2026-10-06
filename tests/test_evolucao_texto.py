@@ -113,3 +113,15 @@ class CadastroTest(unittest.TestCase):
         self.assertGreater(len(m), 20)
         visitadora = {'profisionalResponsavel': sorted(m)[0], 'hipotese': 'EVOLUÇÃO DIARIA', 'evolucao': 'PACIENTE ESTÁVEL, SEM QUEIXAS, MANTÉM CONDUTA.'}
         self.assertTrue(eh_medica(visitadora, visitadora['evolucao'], m))
+
+
+class LigacaoTest(unittest.TestCase):
+    def test_leito_nao_rouba_paciente_de_outro(self):
+        evo = lambda medico: {'data': '2026-10-05T10:00:00', 'medico': medico, 'resumo': {}, 'texto': medico}
+        # F3 (47 a, internada 28/09) e F4 (48 a, internada 04/10): idades vizinhas, setor igual.
+        pacientes = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 47, 'internacao': '2026-09-28'},
+                     {'leito': 'F4', 'categoria': 'enfermaria', 'idade': 48, 'internacao': '2026-10-04'}]
+        resumos = [{'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-10-04', 'evolucao': evo('DRA DO F4')},   # paciente do F4 (idade na fila arredondada)
+                   {'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', 'evolucao': evo('DRA DO F3')}]
+        r = {p['leito']: p.get('resumoMedico') for p in cruzar_resumos(pacientes, resumos)}
+        self.assertEqual(r, {'F3': 'DRA DO F3', 'F4': 'DRA DO F4'})

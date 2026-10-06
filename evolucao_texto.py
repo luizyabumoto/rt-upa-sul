@@ -227,21 +227,42 @@ def ler_resumos(cliente, medicos=()):
     return cliente._com_token(ler)
 
 
+def _nota_ligacao(p, r):
+    """Quão certo é que o paciente r da fila do Gestor está no leito p do censo (-1 = não pode ser)."""
+    from datetime import date
+    if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
+        return -1
+    nota = 2 if r['anos'] == p['idade'] else 0
+    setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
+    nota += 1 if r['setor'] == setor else 0
+    if r.get('chegada') and p.get('internacao'):
+        dias = abs((date.fromisoformat(r['chegada']) - date.fromisoformat(p['internacao'])).days)
+        nota += 4 if dias == 0 else 2 if dias == 1 else -2   # data de internação diferente pesa contra
+    return nota
+
+
 def cruzar_resumos(pacientes, resumos):
-    """Põe em cada leito do censo o resumo da última evolução médica do paciente da fila que bate com ele:
-    mesmo setor (Box/enfermaria), mesma idade (±1 ano) e, de preferência, mesma data de internação."""
-    livres, saida = [r for r in resumos if r.get('evolucao')], []
-    for p in pacientes:
-        setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
-        def nota(r):
-            if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
-                return -1
-            return (2 if r['chegada'] and r['chegada'] == p.get('internacao') else 0) + (1 if r['setor'] == setor else 0) + (1 if r['anos'] == p['idade'] else 0)
-        melhor = max(livres, key=nota, default=None)
-        if melhor and nota(melhor) >= 2:
-            livres.remove(melhor)
-            e = melhor['evolucao']
-            saida.append({**p, 'resumo': e['resumo'], 'resumoEm': e['data'], 'resumoMedico': e['medico'], 'resumoRecentes': e.get('recentes', []), 'evolucaoTexto': e.get('texto', '')})
-        else:
+    """Põe em cada leito do censo a última evolução médica do paciente da fila que bate com ele.
+    Calcula todas as combinações (idade, data de internação, setor) e liga primeiro os pares mais certos:
+    assim um leito não "rouba" o paciente de outro só por vir antes na lista."""
+    candidatos = [r for r in resumos if r.get('evolucao')]
+    pares = sorted(((_nota_ligacao(p, r), i, j) for i, p in enumerate(pacientes) for j, r in enumerate(candidatos)), reverse=True)
+    ligado, usado = {}, set()
+    for nota, i, j in pares:
+        if nota < 3:
+            break
+        if i in ligado or j in usado:
+            continue
+        ligado[i] = {**candidatos[j], 'nota': nota}
+        usado.add(j)
+    saida = []
+    for i, p in enumerate(pacientes):
+        r = ligado.get(i)
+        if not r:
             saida.append(p)
+            continue
+        e = r['evolucao']
+        saida.append({**p, 'resumo': e['resumo'], 'resumoEm': e['data'], 'resumoMedico': e['medico'],
+                      'resumoRecentes': e.get('recentes', []), 'evolucaoTexto': e.get('texto', ''),
+                      'ligacao': {'anos': r['anos'], 'chegada': r['chegada'], 'nota': r['nota']}})
     return saida

@@ -315,7 +315,9 @@ def internados(censo, evolucoes=None, agora=None):
                    'deMedico': sum(d.get('medicas', 0) for d in diags),
                    'erros': sorted({d['erro'] for d in diags if d.get('erro')})[:3], 'erroGeral': evo.get('erroResumos'),
                    'campos': next((d['campos'] for d in diags if d.get('campos')), []),
-                   'camposProfissional': next((d['camposProfissional'] for d in diags if d.get('camposProfissional')), [])}
+                   'camposProfissional': next((d['camposProfissional'] for d in diags if d.get('camposProfissional')), []),
+                   'ligacoes': {p['leito']: {**p['ligacao'], 'medico': p.get('resumoMedico'), 'em': p.get('resumoEm')} for p in pacientes if p.get('ligacao')},
+                   'semLigacao': [p['leito'] for p in pacientes if not p.get('ligacao') and p['categoria'] in ('enfermaria', 'pediatria', 'box')]}
     return {**dados, 'pacientes': pacientes,
             'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []), 'diagnostico': diagnostico,
                          'inicioVisita': inicio_visita(agora).isoformat(), **({'visitas': resumir_visitas(pacientes)} if evo['disponivel'] else {})}}
