@@ -158,6 +158,12 @@ def visita_pela_leitura_direta(pacientes, agora):
             continue
         ultima = datetime.fromisoformat(p['resumoEm'])
         ultima = ultima if ultima.tzinfo else ultima.replace(tzinfo=CUIABA)
+        medico = p.get('resumoMedico')
+        if p.get('ultimaEvolucao'):   # relatório de produção achou evolução mais nova para o mesmo leito
+            outra = datetime.fromisoformat(p['ultimaEvolucao'])
+            outra = outra if outra.tzinfo else outra.replace(tzinfo=CUIABA)
+            if outra > ultima:
+                ultima, medico = outra, p.get('medicoEvolucao') or medico
         prazo = agora - VALIDADE_BOX if p['categoria'] == 'box' else visita
         recem = p['categoria'] != 'box' and p.get('internacao') == agora.date().isoformat()
         setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
@@ -168,7 +174,7 @@ def visita_pela_leitura_direta(pacientes, agora):
             if m >= agora - timedelta(hours=36):
                 recentes.append({'momento': m.isoformat(), 'medico': r['medico'], 'setor': setor})
         saida.append({**p, 'evolucao': 'em-dia' if ultima >= prazo or recem else 'pendente', 'ultimaEvolucao': ultima.isoformat(),
-                      'medicoEvolucao': p.get('resumoMedico'), 'horasSemEvolucao': round((agora - ultima).total_seconds() / 3600, 1),
+                      'medicoEvolucao': medico, 'horasSemEvolucao': round((agora - ultima).total_seconds() / 3600, 1),
                       'evolucoesRecentes': recentes or p.get('evolucoesRecentes', []), 'fonteEvolucao': 'direta'})
     return saida
 

@@ -236,6 +236,28 @@ def ler_resumos(cliente, medicos=()):
     return cliente._com_token(ler)
 
 
+PREFIXOS_LEITO = {'F': r'F|FEM\w*|ENF\.?\s*FEM\w*', 'M': r'M|MASC\w*|ENF\.?\s*MASC\w*', 'E': r'E|EXTRA',
+                   'BX': r'BX|BOX', 'B': r'B|BX|BOX', 'P': r'P|PED\w*', 'SM': r'SM|SALA DE MEDICACAO'}
+
+
+def _pistas_do_texto(p, r):
+    """Pontos pelo que o médico escreveu na evolução: o leito (+6), a idade (+3) e o primeiro nome do paciente (+4)."""
+    texto = _maiusculas(((r.get('evolucao') or {}).get('texto') or '')[:6000])
+    if not texto:
+        return 0
+    pontos = 0
+    m = re.match(r'([A-Z]+)\s*0*(\d+)$', str(p.get('leito') or '').upper())
+    if m and m.group(1) in PREFIXOS_LEITO:
+        if re.search(r'(?<![A-Z0-9])(%s)\s*[-:]?\s*0*%s(?!\d)' % (PREFIXOS_LEITO[m.group(1)], m.group(2)), texto):
+            pontos += 6
+    if isinstance(p.get('idade'), int) and re.search(r'(?<!\d)%d\s*(ANOS|A\b)' % p['idade'], texto):
+        pontos += 3
+    primeiro = (p.get('_nome') or '').split()[:1]
+    if primeiro and len(primeiro[0]) >= 3 and re.search(r'\b%s\b' % re.escape(primeiro[0]), texto):
+        pontos += 4
+    return pontos
+
+
 def _nota_ligacao(p, r, unico=False):
     """Quão certo é que o paciente r da fila do Gestor está no leito p do censo (-1 = não pode ser).
     Idade igual +2, mesmo setor +1, mesma data de internação +4 (±1 dia +2), idade sem nenhum vizinho no censo +2.
@@ -251,8 +273,9 @@ def _nota_ligacao(p, r, unico=False):
         if a and b and (a == b or (a[0] == b[0] and a[-1] == b[-1]) or (a[0] == b[0] and comuns >= 3)):
             return 50
         bonus_nome = 30 if a and b and a[0] == b[0] and comuns >= 2 else 10 if a and b and a[0] == b[0] else -3
+    pistas = _pistas_do_texto(p, r)
     if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
-        return 20 if bonus_nome >= 30 else -1
+        return 20 if bonus_nome >= 30 else 3 if pistas >= 10 else -1
     nota = 2 if r['anos'] == p['idade'] else 0
     setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
     nota += 1 if r['setor'] == setor else 0
@@ -261,26 +284,32 @@ def _nota_ligacao(p, r, unico=False):
         nota += 4 if dias == 0 else 2 if dias == 1 else 0
     if unico and r['anos'] == p['idade']:
         nota += 2
-    return nota + bonus_nome
+    return nota + bonus_nome + pistas
 
 
 def cruzar_resumos(pacientes, resumos):
     """Põe em cada leito do censo a última evolução médica do paciente da fila que bate com ele.
     Calcula todas as combinações (idade, data de internação, setor) e liga primeiro os pares mais certos:
     assim um leito não "rouba" o paciente de outro só por vir antes na lista."""
-    candidatos = [r for r in resumos if r.get('evolucao')]
+    candidatos, vistos = [], set()
+    for r in sorted((r for r in resumos if r.get('evolucao')), key=lambda r: (r['evolucao'].get('data') or ''), reverse=True):
+        if r.get('pacienteId') is not None and r['pacienteId'] in vistos:
+            continue
+        vistos.add(r.get('pacienteId'))
+        candidatos.append(r)
     # Idade "única": nenhum outro internado do censo com idade a até 1 ano (ex.: a única paciente de 91 anos).
     idades = [p.get('idade') for p in pacientes if isinstance(p.get('idade'), int)]
     unico = lambda p: isinstance(p.get('idade'), int) and sum(abs(x - p['idade']) <= 1 for x in idades) == 1
     pares = sorted(((_nota_ligacao(p, r, unico(p)), i, j) for i, p in enumerate(pacientes) for j, r in enumerate(candidatos)), reverse=True)
     ligado, usado = {}, set()
-    for nota, i, j in pares:
-        if nota < 3:
-            break
-        if i in ligado or j in usado:
-            continue
-        ligado[i] = {**candidatos[j], 'nota': nota}
-        usado.add(j)
+    for minimo in (3, 0):   # 1ª rodada: pares certos; 2ª: o que sobrou, se a idade bate (±1) e o nome não contradiz (ninguém fica sem evolução à toa)
+        for nota, i, j in pares:
+            if nota < minimo:
+                break
+            if i in ligado or j in usado:
+                continue
+            ligado[i] = {**candidatos[j], 'nota': nota}
+            usado.add(j)
     saida = []
     for i, p in enumerate(pacientes):
         r = ligado.get(i)

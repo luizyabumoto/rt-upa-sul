@@ -83,6 +83,18 @@ if __name__ == '__main__':
 
 
 class VisitaDiretaTest(unittest.TestCase):
+    def test_vale_a_evolucao_mais_nova_entre_as_duas_leituras(self):
+        from datetime import datetime
+        from internacao import CUIABA, visita_pela_leitura_direta
+        agora = datetime(2026, 10, 5, 20, 0, tzinfo=CUIABA)
+        # Leitura direta ligou uma evolução de ontem; o relatório de produção achou a do Dr. Thiago hoje.
+        p = {'leito': 'F3', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-10-01', 'evolucao': 'em-dia',
+             'ultimaEvolucao': '2026-10-05T09:30:00-04:00', 'medicoEvolucao': 'DR THIAGO TESTE',
+             'resumoEm': '2026-10-04T10:00:00', 'resumoMedico': 'DRA ONTEM', 'resumoRecentes': []}
+        r = visita_pela_leitura_direta([p], agora)[0]
+        self.assertEqual(r['evolucao'], 'em-dia')
+        self.assertEqual(r['medicoEvolucao'], 'DR THIAGO TESTE')
+
     def test_leitura_direta_marca_em_dia_quando_a_ligacao_pela_idade_falhou(self):
         from datetime import datetime
         from internacao import CUIABA, visita_pela_leitura_direta
@@ -153,6 +165,35 @@ class LigacaoTest(unittest.TestCase):
         # Nome totalmente diferente e idade igual: ainda pode ligar pela idade/data (o NIR pode ter digitado outro nome).
         r2 = cruzar_resumos(p, [{'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'JOANA TESTE', 'evolucao': evo}])
         self.assertEqual(r2[0].get('resumoMedico'), 'DRA JHENIFFER TESTE')
+
+    def test_leito_escrito_na_evolucao_liga(self):
+        # F3 (Vânia): a fila não traz o nome e a idade do Gestor bate com outra paciente; o texto do Dr. Thiago diz "F3".
+        evo = lambda medico, texto: {'data': '2026-10-05T09:00:00', 'medico': medico, 'resumo': {}, 'texto': texto}
+        pacientes = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-10-01', '_nome': 'VANIA TESTE'},
+                     {'leito': 'F5', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-10-01', '_nome': 'ROSA TESTE'}]
+        resumos = [{'pacienteId': 1, 'setor': 'enfermaria', 'anos': 62, 'chegada': '2026-10-01',
+                    'evolucao': evo('DR THIAGO TESTE', 'EVOLUÇÃO MÉDICA - ENF FEM 3\nPaciente 62 anos, estável.\nCD: manter')},
+                   {'pacienteId': 2, 'setor': 'enfermaria', 'anos': 62, 'chegada': '2026-10-01',
+                    'evolucao': evo('DRA OUTRA TESTE', 'LEITO F5 - paciente estável. CD: alta amanhã')}]
+        r = {p['leito']: p.get('resumoMedico') for p in cruzar_resumos(pacientes, list(reversed(resumos)))}
+        self.assertEqual(r, {'F3': 'DR THIAGO TESTE', 'F5': 'DRA OUTRA TESTE'})
+
+    def test_sobra_liga_na_segunda_rodada(self):
+        # Idade a 1 ano, setor diferente e data diferente: sozinho não passaria; como sobrou, liga.
+        evo = {'data': '2026-10-05T09:00:00', 'medico': 'DR THIAGO TESTE', 'resumo': {}, 'texto': 'x'}
+        p = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-09-20'}]
+        r = cruzar_resumos(p, [{'pacienteId': 1, 'setor': 'box', 'anos': 61, 'chegada': '2026-10-03', 'evolucao': evo}])
+        self.assertEqual(r[0].get('resumoMedico'), 'DR THIAGO TESTE')
+
+    def test_mesmo_paciente_duas_vezes_na_fila_conta_uma(self):
+        velha = {'data': '2026-10-03T09:00:00', 'medico': 'DR VELHO', 'resumo': {}, 'texto': 'x'}
+        nova = {'data': '2026-10-05T09:00:00', 'medico': 'DR NOVO', 'resumo': {}, 'texto': 'x'}
+        p = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-10-01'},
+             {'leito': 'F4', 'categoria': 'enfermaria', 'idade': 62, 'internacao': '2026-10-01'}]
+        r = cruzar_resumos(p, [{'pacienteId': 7, 'setor': 'enfermaria', 'anos': 62, 'chegada': '2026-10-01', 'evolucao': velha},
+                               {'pacienteId': 7, 'setor': 'enfermaria', 'anos': 62, 'chegada': '2026-10-01', 'evolucao': nova}])
+        self.assertEqual([x.get('resumoMedico') for x in r].count('DR NOVO'), 1)
+        self.assertNotIn('DR VELHO', [x.get('resumoMedico') for x in r])
 
     def test_tipo_de_internacao_da_fila(self):
         fila = [{'atendimentoTipo': 'LEITO DE OBSERVAÇÃO PSIQUIATRIA', 'pacienteId': 1, 'idadeMeses': '47 ano(s)', 'chegada': '2026-09-28T10:00:00'},
