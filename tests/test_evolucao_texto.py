@@ -104,3 +104,12 @@ class VisitaDiretaTest(unittest.TestCase):
         r = resumir_evolucao('#SSVV: PA 130x100/ FC 63/ FR 19/ T 36.1/ DEXTRO 112/ SATO2 92% (EM AA)\n#HD:\nICC DESCOMPENSADA')
         self.assertEqual(r['vitais'], {'PA': '130x100', 'FC': '63', 'FR': '19', 'SpO2': '92', 'Tax': '36.1', 'Dextro': '112'})
         self.assertEqual(r['hipoteses'], ['Icc descompensada'])
+
+
+class CadastroTest(unittest.TestCase):
+    def test_medicos_da_escala_contam_mesmo_sem_consultorio(self):
+        from evolucao_texto import medicos_cadastrados
+        m = medicos_cadastrados()
+        self.assertGreater(len(m), 20)
+        visitadora = {'profisionalResponsavel': sorted(m)[0], 'hipotese': 'EVOLUÇÃO DIARIA', 'evolucao': 'PACIENTE ESTÁVEL, SEM QUEIXAS, MANTÉM CONDUTA.'}
+        self.assertTrue(eh_medica(visitadora, visitadora['evolucao'], m))

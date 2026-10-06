@@ -174,9 +174,24 @@ def medicos_da_producao(cliente, dias=7):
     return nomes
 
 
+def medicos_cadastrados():
+    """Médicos da escala e do cadastro do site (src/seed.json: cadastro, escala importada, visitadores e cinderelas).
+    Cobre quem só faz visita na enfermaria e não atende no consultório (e por isso não aparece na produção)."""
+    import json
+    from pathlib import Path
+    try:
+        seed = json.loads((Path(__file__).resolve().parent / 'src' / 'seed.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return set()
+    nomes = set(seed.get('physicians') or [])
+    for chave in ('assignments', 'visits', 'cinderelas'):
+        nomes |= {x.get('doctor') for x in seed.get(chave) or [] if isinstance(x, dict)}
+    return {str(n).split('\n')[0].strip() for n in nomes if n and str(n).strip()}
+
+
 def ler_resumos(cliente, medicos=()):
     """[{setor, anos, chegada, evolucao}] de cada internado da fila (sem nenhum identificador na saída final)."""
-    medicos = set(medicos)
+    medicos = set(medicos) | medicos_cadastrados()
     try:
         medicos |= medicos_da_producao(cliente)
     except (GestorSaudeError, AttributeError, TypeError):
