@@ -317,7 +317,9 @@ def internados(censo, evolucoes=None, agora=None):
                    'campos': next((d['campos'] for d in diags if d.get('campos')), []),
                    'camposProfissional': next((d['camposProfissional'] for d in diags if d.get('camposProfissional')), []),
                    'ligacoes': {p['leito']: {**p['ligacao'], 'medico': p.get('resumoMedico'), 'em': p.get('resumoEm')} for p in pacientes if p.get('ligacao')},
-                   'semLigacao': [p['leito'] for p in pacientes if not p.get('ligacao') and p['categoria'] in ('enfermaria', 'pediatria', 'box')]}
+                   'semLigacao': [p['leito'] for p in pacientes if not p.get('ligacao') and p['categoria'] in ('enfermaria', 'pediatria', 'box')],
+                   'fila': [{'anos': r.get('anos'), 'chegada': r.get('chegada'), 'setor': r.get('setor'), 'tipo': r.get('tipo'), 'temNome': bool(r.get('_nome')),
+                             'evolucaoMedica': (r.get('evolucao') or {}).get('medico')} for r in rs]}
     pacientes = [{k: v for k, v in p.items() if not k.startswith('_')} for p in pacientes]
     return {**dados, 'pacientes': pacientes,
             'evolucao': {'disponivel': evo['disponivel'], 'erro': evo.get('erro'), 'tiposLidos': evo.get('tipos', []), 'camposFila': evo.get('camposFila', []), 'diagnostico': diagnostico,

@@ -17,6 +17,7 @@ from gestor_saude import GestorSaudeError, _horario, normalizar
 from resumo_evolucao import resumir_evolucao
 
 SETORES = ('ENFERMARIA', 'BOX', 'OBSERVACAO')
+NAO_INTERNACAO = ('CONSULTORIO', 'CLASSIFICACAO', 'RETORNO', 'SUTURA', 'TRIAGEM', 'ODONTO', 'RAIO', 'LABORATORIO', 'ELETRO', 'VACINA', 'CURATIVO', 'ACOLHIMENTO', 'RECEPCAO')
 CBO_MEDICO = {'225125', '225124', '225142', '225170', '455', '454'}   # códigos de médico e os IDs de CBO médico da UPA Sul
 NAO_MEDICO = re.compile(r'ENFERM|TECNIC|FISIOTERAP|ASSISTENTE SOCIAL|SERVICO SOCIAL|NUTRI|PSICOLOG|FARMAC|\bNIR\b|ADMINISTRATIV')
 ROTEIRO_MEDICO = re.compile(r'(^|\n)\s*#?\s*(HD|CD|HIPOTESE DIAGNOSTICA|CONDUTA)\s*:', re.M)
@@ -84,6 +85,12 @@ def _data(item):
 LIGACOES = {'DA', 'DE', 'DO', 'DAS', 'DOS', 'E'}
 
 
+def _simples(nome):
+    """Grafia simplificada para comparar nomes: sem H, sem letra dobrada, Y→I, W→V (JHENIFFER = JENIFER)."""
+    t = nome.replace('Y', 'I').replace('W', 'V').replace('H', '')
+    return re.sub(r'(.)\1+', r'\1', t)
+
+
 def _mesmo_nome(a, b):
     """Mesma pessoa: mesmo primeiro nome e pelo menos mais um nome igual ("RAQUEL ALVES" ≠ "RAQUEL SOUZA")."""
     ta = [x for x in normalizar(a).split() if x not in LIGACOES]
@@ -148,14 +155,14 @@ def internados_na_fila(itens_fila):
     saida = []
     for i in itens_fila:
         tipo = normalizar(i.get('atendimentoTipo'))
-        if not any(s in tipo for s in SETORES) or not i.get('pacienteId'):
+        if not tipo or any(s in tipo for s in NAO_INTERNACAO) or not i.get('pacienteId'):
             continue
         idade = str(i.get('idadeMeses') or i.get('idade') or '')
         anos = re.match(r'\s*(\d+)\s*ano', idade)
         chegada = _horario(i.get('chegada'))
         pac = i.get('paciente') if isinstance(i.get('paciente'), dict) else {}
         nome = next((str(v) for v in (i.get('pacienteNome'), i.get('nome'), i.get('nomePaciente'), pac.get('nome'), pac.get('nomeCompleto'), pac.get('pessoaNome')) if v), '')
-        saida.append({'pacienteId': i['pacienteId'], 'setor': 'box' if 'BOX' in tipo else 'enfermaria', '_nome': ' '.join(normalizar(nome).split()),
+        saida.append({'pacienteId': i['pacienteId'], 'setor': 'box' if 'BOX' in tipo else 'enfermaria', 'tipo': tipo.title()[:40], '_nome': ' '.join(normalizar(nome).split()),
                       'anos': int(anos.group(1)) if anos else None, 'chegada': chegada.date().isoformat() if chegada else None})
     return saida
 
@@ -234,15 +241,18 @@ def _nota_ligacao(p, r, unico=False):
     Idade igual +2, mesmo setor +1, mesma data de internação +4 (±1 dia +2), idade sem nenhum vizinho no censo +2.
     Data diferente NÃO pesa contra: quem passa do Box para a enfermaria ganha atendimento novo no Gestor."""
     from datetime import date
-    # Nome dos dois lados (planilha e Gestor): decide sozinho. Mesmo nome = é ele; nome diferente = não é.
+    # Nome dos dois lados (planilha e Gestor): o mais forte. Parecido também vale; diferente só pesa um pouco
+    # (o NIR às vezes abrevia, esquece um sobrenome ou troca uma letra) e aí idade/data decidem.
+    bonus_nome = 0
     if p.get('_nome') and r.get('_nome'):
-        a = [x for x in p['_nome'].split() if x not in LIGACOES]
-        b = [x for x in r['_nome'].split() if x not in LIGACOES]
-        if a and b and (a == b or (a[0] == b[0] and a[-1] == b[-1]) or (a[0] == b[0] and len(set(a) & set(b)) >= 3)):
+        a = [_simples(x) for x in p['_nome'].split() if x not in LIGACOES]
+        b = [_simples(x) for x in r['_nome'].split() if x not in LIGACOES]
+        comuns = len(set(a) & set(b))
+        if a and b and (a == b or (a[0] == b[0] and a[-1] == b[-1]) or (a[0] == b[0] and comuns >= 3)):
             return 50
-        return -1
+        bonus_nome = 30 if a and b and a[0] == b[0] and comuns >= 2 else 10 if a and b and a[0] == b[0] else -3
     if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
-        return -1
+        return 20 if bonus_nome >= 30 else -1
     nota = 2 if r['anos'] == p['idade'] else 0
     setor = 'box' if p['categoria'] == 'box' else 'enfermaria'
     nota += 1 if r['setor'] == setor else 0
@@ -251,7 +261,7 @@ def _nota_ligacao(p, r, unico=False):
         nota += 4 if dias == 0 else 2 if dias == 1 else 0
     if unico and r['anos'] == p['idade']:
         nota += 2
-    return nota
+    return nota + bonus_nome
 
 
 def cruzar_resumos(pacientes, resumos):

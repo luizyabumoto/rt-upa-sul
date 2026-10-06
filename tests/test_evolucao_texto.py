@@ -143,3 +143,19 @@ class LigacaoTest(unittest.TestCase):
                    {'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'ANA PAULA DE TESTE SOUZA', 'evolucao': evo('DRA DA ANA')}]
         r = {p['leito']: p.get('resumoMedico') for p in cruzar_resumos(pacientes, resumos)}
         self.assertEqual(r, {'F3': 'DRA DA ANA', 'F4': 'DRA DA BEATRIZ'})
+
+    def test_nome_digitado_diferente_nao_derruba_a_ligacao(self):
+        evo = {'data': '2026-10-05T09:00:00', 'medico': 'DRA JHENIFFER TESTE', 'resumo': {}, 'texto': 'x'}
+        p = [{'leito': 'F3', 'categoria': 'enfermaria', 'idade': 47, 'internacao': '2026-09-28', '_nome': 'MARIA APARECIDA SOUSA'}]
+        # Gestor com outra grafia/sobrenome a mais: ainda é ela (primeiro nome + idade + data).
+        r = cruzar_resumos(p, [{'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'MARIA APARECIDA DE SOUZA LIMA', 'evolucao': evo}])
+        self.assertEqual(r[0].get('resumoMedico'), 'DRA JHENIFFER TESTE')
+        # Nome totalmente diferente e idade igual: ainda pode ligar pela idade/data (o NIR pode ter digitado outro nome).
+        r2 = cruzar_resumos(p, [{'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', '_nome': 'JOANA TESTE', 'evolucao': evo}])
+        self.assertEqual(r2[0].get('resumoMedico'), 'DRA JHENIFFER TESTE')
+
+    def test_tipo_de_internacao_da_fila(self):
+        fila = [{'atendimentoTipo': 'LEITO DE OBSERVAÇÃO PSIQUIATRIA', 'pacienteId': 1, 'idadeMeses': '47 ano(s)', 'chegada': '2026-09-28T10:00:00'},
+                {'atendimentoTipo': 'CONSULTÓRIO ADULTO', 'pacienteId': 2, 'idadeMeses': '30 ano(s)', 'chegada': '2026-10-05T10:00:00'},
+                {'atendimentoTipo': 'CLASSIFICAÇÃO DE RISCO', 'pacienteId': 3, 'idadeMeses': '20 ano(s)', 'chegada': '2026-10-05T10:00:00'}]
+        self.assertEqual([p['anos'] for p in internados_na_fila(fila)], [47])
