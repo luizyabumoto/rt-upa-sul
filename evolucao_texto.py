@@ -227,8 +227,10 @@ def ler_resumos(cliente, medicos=()):
     return cliente._com_token(ler)
 
 
-def _nota_ligacao(p, r):
-    """Quão certo é que o paciente r da fila do Gestor está no leito p do censo (-1 = não pode ser)."""
+def _nota_ligacao(p, r, unico=False):
+    """Quão certo é que o paciente r da fila do Gestor está no leito p do censo (-1 = não pode ser).
+    Idade igual +2, mesmo setor +1, mesma data de internação +4 (±1 dia +2), idade sem nenhum vizinho no censo +2.
+    Data diferente NÃO pesa contra: quem passa do Box para a enfermaria ganha atendimento novo no Gestor."""
     from datetime import date
     if r['anos'] is None or not isinstance(p.get('idade'), int) or abs(r['anos'] - p['idade']) > 1:
         return -1
@@ -237,7 +239,9 @@ def _nota_ligacao(p, r):
     nota += 1 if r['setor'] == setor else 0
     if r.get('chegada') and p.get('internacao'):
         dias = abs((date.fromisoformat(r['chegada']) - date.fromisoformat(p['internacao'])).days)
-        nota += 4 if dias == 0 else 2 if dias == 1 else -2   # data de internação diferente pesa contra
+        nota += 4 if dias == 0 else 2 if dias == 1 else 0
+    if unico and r['anos'] == p['idade']:
+        nota += 2
     return nota
 
 
@@ -246,7 +250,10 @@ def cruzar_resumos(pacientes, resumos):
     Calcula todas as combinações (idade, data de internação, setor) e liga primeiro os pares mais certos:
     assim um leito não "rouba" o paciente de outro só por vir antes na lista."""
     candidatos = [r for r in resumos if r.get('evolucao')]
-    pares = sorted(((_nota_ligacao(p, r), i, j) for i, p in enumerate(pacientes) for j, r in enumerate(candidatos)), reverse=True)
+    # Idade "única": nenhum outro internado do censo com idade a até 1 ano (ex.: a única paciente de 91 anos).
+    idades = [p.get('idade') for p in pacientes if isinstance(p.get('idade'), int)]
+    unico = lambda p: isinstance(p.get('idade'), int) and sum(abs(x - p['idade']) <= 1 for x in idades) == 1
+    pares = sorted(((_nota_ligacao(p, r, unico(p)), i, j) for i, p in enumerate(pacientes) for j, r in enumerate(candidatos)), reverse=True)
     ligado, usado = {}, set()
     for nota, i, j in pares:
         if nota < 3:

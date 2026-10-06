@@ -125,3 +125,12 @@ class LigacaoTest(unittest.TestCase):
                    {'setor': 'enfermaria', 'anos': 47, 'chegada': '2026-09-28', 'evolucao': evo('DRA DO F3')}]
         r = {p['leito']: p.get('resumoMedico') for p in cruzar_resumos(pacientes, resumos)}
         self.assertEqual(r, {'F3': 'DRA DO F3', 'F4': 'DRA DO F4'})
+
+    def test_idade_unica_liga_mesmo_com_data_diferente(self):
+        # E3 (91 a, internada 30/09): no Gestor o atendimento atual começou em outra data (passou de setor).
+        evo = {'data': '2026-10-05T09:00:00', 'medico': 'DR THIAGO TESTE', 'resumo': {}, 'texto': 'x'}
+        pacientes = [{'leito': 'E3', 'categoria': 'enfermaria', 'idade': 91, 'internacao': '2026-09-30'},
+                     {'leito': 'F2', 'categoria': 'enfermaria', 'idade': 59, 'internacao': '2026-09-23'}]
+        r = cruzar_resumos(pacientes, [{'setor': 'enfermaria', 'anos': 91, 'chegada': '2026-10-03', 'evolucao': evo}])
+        self.assertEqual(r[0].get('resumoMedico'), 'DR THIAGO TESTE')
+        self.assertNotIn('resumoMedico', r[1])
