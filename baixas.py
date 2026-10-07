@@ -44,8 +44,11 @@ def candidatos(itens, horas):
 
 # Encerramento confirmado no Gestor (F12 do RT, 07/10/2026): Atender = POST Funcao/{id}/1/0; depois
 # POST api/AtendimentoEncaminhamento com encaminhamento 194 "ENCERRAR ATENDIMENTO" e o CID já registrado no atendimento.
+# Sem diagnóstico no atendimento, o Gestor recusa a alta ("Preencha o CID"). Como o robô: registra antes
+# Z000 - EXAME MÉDICO GERAL como suspeita diagnóstica (POST api/PacienteAtendimentoDiagnostico, conferido no F12).
 ENCERRAR = {'encaminhamentoId': 194, 'encaminhamento': 'ENCERRAR ATENDIMENTO ', 'tipoEncaminhamentoId': 18}
-MOTIVO_PADRAO = 3          # "Alta Melhorado" (o que o RT usou no encerramento manual)
+CID_PADRAO = {'cidId': 4870, 'texto': 'Z000 - EXAME MÉDICO GERAL'}
+MOTIVO_PADRAO = 5          # "Alta por Outros Motivos" (o que o RT usou no encerramento com Z000)
 MINIMO_HORAS = 24          # nunca encerra retorno aberto há menos que isso, venha o pedido de onde vier
 MOTIVO_LIBERAR = 'FINALIZAR ATENDIMENTO'
 
@@ -64,13 +67,13 @@ def procurar(obj, chave):
     return None
 
 
-def montar_encerramento(item_fila, atual):
+def montar_encerramento(item_fila, atual, cid_padrao=False):
     """Corpo do POST api/AtendimentoEncaminhamento, igual ao que a tela do Gestor envia.
-    None se o atendimento não tem CID registrado (aí a baixa fica para ser feita à mão)."""
-    cid_id = procurar(atual, 'cidId')
+    Com cid_padrao=True usa o Z000 (registrado antes como diagnóstico); senão o CID já registrado (None se não houver)."""
+    cid_id = CID_PADRAO['cidId'] if cid_padrao else procurar(atual, 'cidId')
     if not cid_id:
         return None
-    cid_texto = procurar(atual, 'cidFilter') or ' - '.join(str(x) for x in (procurar(atual, 'cidCodigo') or procurar(atual, 'codigo'), procurar(atual, 'cidDescricao') or procurar(atual, 'descricao')) if x)
+    cid_texto = CID_PADRAO['texto'] if cid_padrao else procurar(atual, 'cidFilter') or ' - '.join(str(x) for x in (procurar(atual, 'cidCodigo') or procurar(atual, 'codigo'), procurar(atual, 'cidDescricao') or procurar(atual, 'descricao')) if x)
     return {'pacienteAtendimentoId': int(item_fila['pacienteAtendimentoId']), 'encaminhamentoId': ENCERRAR['encaminhamentoId'],
             'encaminhamentoFilter': dict(ENCERRAR), 'motivoEncerramentoId': int(procurar(atual, 'motivoEncerramentoId') or MOTIVO_PADRAO),
             'cidId': int(cid_id), 'cidFilter': str(cid_texto or ''),
@@ -122,17 +125,43 @@ class PainelBaixas:
         def ler(caminho, metodo='GET'):
             return self.cliente._com_token(lambda: self.cliente._chamar(caminho, token=self.cliente.token, metodo=metodo))
 
+        def enviar(caminho, dados):
+            return self.cliente._com_token(lambda: self.cliente._chamar(caminho, dados, token=self.cliente.token))
+
         atual = ler(f'api/PacienteAtendimento/FindAtendimentoEncaminhamento/{int(atendimento_id)}')
         corpo = montar_encerramento(item, atual)
         if not corpo:
-            return {'id': atendimento_id, 'nome': nome, 'ok': False, 'mensagem': 'Sem CID registrado no atendimento: dar baixa à mão no Gestor.'}
-        resumo = f"CID {corpo['cidFilter'] or corpo['cidId']} · motivo {corpo['motivoEncerramentoId']}"
+            # O CID pode estar só na lista de diagnósticos do atendimento (a mesma da tela "Diagnóstico do Paciente").
+            try:
+                diagnosticos = enviar(f'api/PacienteAtendimentoDiagnostico/Pagination/{int(atendimento_id)}',
+                                      {'page': 1, 'pageSize': 10, 'filter': [], 'sort': []})
+            except Exception:   # noqa: BLE001 - sem a lista, segue para o Z000 como o robô
+                diagnosticos = None
+            if procurar(diagnosticos, 'cidId'):
+                texto = procurar(diagnosticos, 'cidFilter') or procurar(diagnosticos, 'cidDescricao')
+                corpo = montar_encerramento(item, {**(atual if isinstance(atual, dict) else {}), 'cidId': procurar(diagnosticos, 'cidId'),
+                                                    'cidFilter': texto if isinstance(texto, str) else ''})
+        precisa_z000 = not corpo
+        if precisa_z000:
+            corpo = montar_encerramento(item, atual, cid_padrao=True)
+        resumo = f"CID {corpo['cidFilter'] or corpo['cidId']}{' (registrado agora)' if precisa_z000 else ''} · motivo {corpo['motivoEncerramentoId']}"
         if simular:
             return {'id': atendimento_id, 'nome': nome, 'ok': True, 'simulado': True, 'mensagem': f'Pronto para encerrar ({resumo}).'}
+        profissional = None
+        if precisa_z000:
+            try:
+                profissional = int(self.cliente._claims(self.cliente.token).get('profissionalId') or 0)
+            except (AttributeError, IndexError, ValueError, TypeError):
+                profissional = 0
+            if not profissional:
+                return {'id': atendimento_id, 'nome': nome, 'ok': False, 'mensagem': 'Sem CID e a conta do Gestor não tem profissional: dar baixa à mão.'}
         conta = normalizar(self.conta())
         preso = normalizar(item.get('profissionalNome'))
         if normalizar(item.get('descricaoSituacao')) == 'ATENDIMENTO' and preso and preso != conta:
             ler(f'api/PacienteAtendimento/Funcao/{int(atendimento_id)}/4/{quote(MOTIVO_LIBERAR)}', 'POST')
         ler(f'api/PacienteAtendimento/Funcao/{int(atendimento_id)}/1/0', 'POST')     # Atender
-        self.cliente._com_token(lambda: self.cliente._chamar('api/AtendimentoEncaminhamento', corpo, token=self.cliente.token))
+        if precisa_z000:
+            enviar('api/PacienteAtendimentoDiagnostico', {'cidId': CID_PADRAO['cidId'], 'pacienteAtendimentoId': int(atendimento_id),
+                                                         'profissionalId': profissional, 'tipoDiagnostico': 'SuspeitaDiagnostico'})
+        enviar('api/AtendimentoEncaminhamento', corpo)
         return {'id': atendimento_id, 'nome': nome, 'ok': True, 'mensagem': f'Atendimento encerrado ({resumo}).'}

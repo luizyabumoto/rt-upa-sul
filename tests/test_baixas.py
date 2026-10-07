@@ -32,7 +32,7 @@ class ClienteFalso:
 
     @staticmethod
     def _claims(token):
-        return {'username': 'LUIZ TESTE'}
+        return {'username': 'LUIZ TESTE', 'profissionalId': '3351'}
 
     def _com_token(self, acao):
         return acao()
@@ -80,11 +80,30 @@ class EncerrarTest(unittest.TestCase):
         caminhos = [x[1] for x in c.chamadas]
         self.assertTrue(any('Funcao/12180479/4/' in x for x in caminhos))
 
-    def test_sem_cid_nao_faz_nada(self):
+    def test_sem_cid_registra_z000_antes_como_o_robo(self):
         p, c = self.painel([ITEM], {'pacienteAtendimentoId': 12180479})
+        self.assertIn('Z000', p.encerrar(12180479, simular=True)['mensagem'])
+        self.assertFalse([x for x in c.chamadas if x[0] == 'POST' and 'Pagination' not in x[1]])   # conferir não altera
         r = p.encerrar(12180479, simular=False)
-        self.assertFalse(r['ok'])
-        self.assertFalse([x for x in c.chamadas if x[0] == 'POST' and 'Pagination' not in x[1]])
+        self.assertTrue(r['ok'])
+        caminhos = [x[1] for x in c.chamadas if x[0] == 'POST' and 'Pagination' not in x[1]]
+        self.assertEqual(caminhos, ['api/PacienteAtendimento/Funcao/12180479/1/0', 'api/PacienteAtendimentoDiagnostico', 'api/AtendimentoEncaminhamento'])
+        diag = next(x[2] for x in c.chamadas if x[1] == 'api/PacienteAtendimentoDiagnostico')
+        self.assertEqual(diag, {'cidId': 4870, 'pacienteAtendimentoId': 12180479, 'profissionalId': 3351, 'tipoDiagnostico': 'SuspeitaDiagnostico'})
+        corpo = next(x[2] for x in c.chamadas if x[1] == 'api/AtendimentoEncaminhamento')
+        self.assertEqual((corpo['cidId'], corpo['encaminhamentoId'], corpo['motivoEncerramentoId']), (4870, 194, 5))
+
+    def test_cid_na_lista_de_diagnosticos_nao_registra_z000(self):
+        p, c = self.painel([ITEM], {'pacienteAtendimentoId': 12180479})
+        original = c._chamar
+        c._chamar = lambda caminho, corpo=None, token=None, metodo='POST': (
+            {'items': [{'cidId': 3779, 'cidFilter': 'M545 - DOR LOMBAR BAIXA'}]} if 'PacienteAtendimentoDiagnostico/Pagination' in caminho
+            else original(caminho, corpo, token, metodo))
+        p.encerrar(12180479, simular=False)
+        caminhos = [x[1] for x in c.chamadas]
+        self.assertNotIn('api/PacienteAtendimentoDiagnostico', caminhos)
+        corpo = next(x[2] for x in c.chamadas if x[1] == 'api/AtendimentoEncaminhamento')
+        self.assertEqual(corpo['cidId'], 3779)
 
     def test_recusa_o_que_nao_e_retorno_esquecido(self):
         for item in ({**ITEM, 'tempo': '10:00'}, {**ITEM, 'atendimentoTipo': 'CONSULTORIO ADULTO'}):
