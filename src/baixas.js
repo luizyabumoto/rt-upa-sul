@@ -21,7 +21,8 @@ export function mountBaixas() {
  <p class="flow-alert bx-alerta" role="alert" hidden></p>
  <section class="int-cartao bx-lista"></section>
  <p class="muted bx-aviso">O encerramento será feito com a conta do Gestor configurada no site e ficará registrado nela.
-  Ele encerra o atendimento aberto; não é alta clínica. O botão de dar baixa será liberado depois que a chamada do Gestor for conferida.</p>`;
+  Ele encerra o atendimento aberto (Encerrar Atendimento, com o CID já registrado); não é alta clínica.
+  Use <strong>Conferir</strong> antes: ele só lê o Gestor e mostra o que seria feito.</p>`;
  const $ = s => painel.querySelector(s);
  let carregando = false;
 
@@ -32,17 +33,64 @@ export function mountBaixas() {
   box.append(el('h3', '', lista.length ? `${lista.length} ${lista.length === 1 ? 'retorno aberto' : 'retornos abertos'} há mais de ${dados.horas} h` : `Nenhum retorno aberto há mais de ${dados.horas} h`));
   if (!lista.length) return;
   const tabela = el('table', 'grid');
-  tabela.innerHTML = '<thead><tr><th>Paciente</th><th>Tipo</th><th>Situação</th><th>Aberto há</th><th>Com profissional</th></tr></thead>';
+  tabela.innerHTML = '<thead><tr><th><input type="checkbox" class="bx-todos" checked aria-label="Marcar todos"></th><th>Paciente</th><th>Tipo</th><th>Situação</th><th>Aberto há</th><th>Com profissional</th><th>Resultado</th></tr></thead>';
   const corpo = el('tbody');
   for (const c of lista) {
    const tr = el('tr');
-   tr.append(el('td', '', c.primeiroNome || '—'), el('td', '', c.tipo), el('td', '', c.situacao), el('td', '', tempoAberto(c.minutos)), el('td', '', c.profissional || '—'));
+   tr.dataset.id = c.id;
+   const marca = el('input', 'bx-marca');
+   marca.type = 'checkbox'; marca.checked = true; marca.dataset.id = c.id;
+   const td0 = el('td'); td0.append(marca);
+   tr.append(td0, el('td', '', c.primeiroNome || '—'), el('td', '', c.tipo), el('td', '', c.situacao), el('td', '', tempoAberto(c.minutos)), el('td', '', c.profissional || '—'), el('td', 'bx-res muted', ''));
    corpo.append(tr);
   }
   tabela.append(corpo);
   const wrap = el('div', 'table-wrap');
   wrap.append(tabela);
   box.append(wrap);
+  const conferir = el('button', 'secondary', 'Conferir (não altera nada)'); conferir.type = 'button';
+  const dar = el('button', 'danger', 'Dar baixa nos marcados'); dar.type = 'button';
+  const acoes = el('div', 'bx-acoes'); acoes.append(conferir, dar);
+  box.append(el('p', 'muted', dados.conta ? `As baixas ficam registradas no Gestor como: ${dados.conta}` : ''), acoes);
+  tabela.querySelector('.bx-todos').addEventListener('change', e => { for (const m of tabela.querySelectorAll('.bx-marca:not(:disabled)')) m.checked = e.target.checked; });
+  conferir.addEventListener('click', () => executar(true, [conferir, dar]));
+  dar.addEventListener('click', () => {
+   const n = painel.querySelectorAll('.bx-marca:checked').length;
+   if (!n) return;
+   if (!confirm(`Encerrar ${n} ${n === 1 ? 'atendimento de retorno' : 'atendimentos de retorno'} no Gestor Saúde?\n\nFica registrado na sua conta e não volta com um clique.`)) return;
+   executar(false, [conferir, dar]);
+  });
+ }
+
+ // Um paciente por vez: mostra o andamento e nunca estoura o tempo do servidor.
+ async function executar(simular, botoes) {
+  const marcados = [...painel.querySelectorAll('.bx-marca:checked')];
+  botoes.forEach(b => { b.disabled = true; });
+  let feitos = 0, falhas = 0;
+  for (const m of marcados) {
+   const res = painel.querySelector(`tr[data-id="${m.dataset.id}"] .bx-res`);
+   res.className = 'bx-res muted';
+   res.textContent = simular ? 'Conferindo…' : 'Encerrando…';
+   try {
+    const r = await fetch('/api/baixas/encerrar', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: Number(m.dataset.id), simular})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Falhou.');
+    res.textContent = d.mensagem || (d.ok ? 'OK' : 'Falhou');
+    res.className = `bx-res ${d.ok ? 'bx-ok' : 'bx-erro'}`;
+    if (d.ok) {
+     feitos++;
+     if (!simular) { m.checked = false; m.disabled = true; }
+    } else falhas++;
+   } catch (erro) {
+    res.textContent = erro.message; res.className = 'bx-res bx-erro'; falhas++;
+   }
+  }
+  botoes.forEach(b => { b.disabled = false; });
+  const alerta = $('.bx-alerta');
+  alerta.textContent = simular
+   ? `Conferência: ${feitos} prontos para encerrar${falhas ? `, ${falhas} com problema (veja a coluna Resultado)` : ''}. Nada foi alterado.`
+   : `${feitos} ${feitos === 1 ? 'atendimento encerrado' : 'atendimentos encerrados'}${falhas ? `, ${falhas} não encerrados (veja a coluna Resultado)` : ''}.`;
+  alerta.hidden = false;
  }
 
  async function carregar() {

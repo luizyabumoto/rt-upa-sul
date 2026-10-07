@@ -23,5 +23,77 @@ class BaixasTest(unittest.TestCase):
         self.assertNotIn('pacienteNome', r[1])
 
 
+class ClienteFalso:
+    """Imita o Gestor: guarda as chamadas feitas, nada sai do computador."""
+    token = 'x.eyJ1c2VybmFtZSI6IkxVSVogVEVTVEUifQ.y'   # {"username": "LUIZ TESTE"}
+
+    def __init__(self, fila, atual):
+        self.fila, self.atual, self.chamadas = fila, atual, []
+
+    @staticmethod
+    def _claims(token):
+        return {'username': 'LUIZ TESTE'}
+
+    def _com_token(self, acao):
+        return acao()
+
+    def _chamar(self, caminho, corpo=None, token=None, metodo='POST'):
+        self.chamadas.append((metodo, caminho, corpo))
+        if 'Pagination' in caminho:
+            return {'items': self.fila, 'recordCount': len(self.fila)}
+        if 'FindAtendimentoEncaminhamento' in caminho:
+            return self.atual
+        return None
+
+
+ITEM = {'pacienteAtendimentoId': 12180479, 'pacienteNome': 'ANA TESTE', 'atendimentoTipo': 'RETORNO ADULTO', 'atendimentoTipoId': 248,
+        'descricaoSituacao': 'AGUARDANDO', 'tempo': '3 dias 01:00'}
+ATUAL = {'pacienteAtendimentoId': 12180479, 'cidId': 3779, 'cidFilter': 'M545 - DOR LOMBAR BAIXA', 'motivoEncerramentoId': 3}
+
+
+class EncerrarTest(unittest.TestCase):
+    def painel(self, fila, atual=ATUAL):
+        from baixas import PainelBaixas
+        c = ClienteFalso(fila, atual)
+        return PainelBaixas(cliente=c), c
+
+    def test_conferir_nao_altera_nada(self):
+        p, c = self.painel([ITEM])
+        r = p.encerrar(12180479, simular=True)
+        self.assertTrue(r['ok'] and r['simulado'])
+        self.assertFalse([x for x in c.chamadas if 'Funcao' in x[1] or x[1] == 'api/AtendimentoEncaminhamento'])
+
+    def test_encerra_igual_a_tela_do_gestor(self):
+        p, c = self.painel([ITEM])
+        r = p.encerrar(12180479, simular=False)
+        self.assertTrue(r['ok'])
+        caminhos = [x[1] for x in c.chamadas]
+        self.assertIn('api/PacienteAtendimento/Funcao/12180479/1/0', caminhos)
+        corpo = next(x[2] for x in c.chamadas if x[1] == 'api/AtendimentoEncaminhamento')
+        self.assertEqual({k: corpo[k] for k in ('pacienteAtendimentoId', 'encaminhamentoId', 'motivoEncerramentoId', 'cidId', 'atendimentoTipoId')},
+                         {'pacienteAtendimentoId': 12180479, 'encaminhamentoId': 194, 'motivoEncerramentoId': 3, 'cidId': 3779, 'atendimentoTipoId': 248})
+        self.assertNotIn('Funcao/12180479/4', ' '.join(caminhos))   # não estava preso com ninguém: não libera
+
+    def test_preso_com_outro_profissional_libera_antes(self):
+        p, c = self.painel([{**ITEM, 'descricaoSituacao': 'ATENDIMENTO', 'profissionalNome': 'OUTRO MEDICO'}])
+        p.encerrar(12180479, simular=False)
+        caminhos = [x[1] for x in c.chamadas]
+        self.assertTrue(any('Funcao/12180479/4/' in x for x in caminhos))
+
+    def test_sem_cid_nao_faz_nada(self):
+        p, c = self.painel([ITEM], {'pacienteAtendimentoId': 12180479})
+        r = p.encerrar(12180479, simular=False)
+        self.assertFalse(r['ok'])
+        self.assertFalse([x for x in c.chamadas if x[0] == 'POST' and 'Pagination' not in x[1]])
+
+    def test_recusa_o_que_nao_e_retorno_esquecido(self):
+        for item in ({**ITEM, 'tempo': '10:00'}, {**ITEM, 'atendimentoTipo': 'CONSULTORIO ADULTO'}):
+            p, c = self.painel([item])
+            self.assertFalse(p.encerrar(12180479, simular=False)['ok'])
+            self.assertFalse([x for x in c.chamadas if x[0] == 'POST' and 'Pagination' not in x[1]])
+        p, c = self.painel([])
+        self.assertFalse(p.encerrar(12180479, simular=False)['ok'])
+
+
 if __name__ == '__main__':
     unittest.main()

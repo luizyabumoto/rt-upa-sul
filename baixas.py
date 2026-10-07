@@ -42,6 +42,41 @@ def candidatos(itens, horas):
     return sorted(saida, key=lambda c: -c['minutos'])
 
 
+# Encerramento confirmado no Gestor (F12 do RT, 07/10/2026): Atender = POST Funcao/{id}/1/0; depois
+# POST api/AtendimentoEncaminhamento com encaminhamento 194 "ENCERRAR ATENDIMENTO" e o CID já registrado no atendimento.
+ENCERRAR = {'encaminhamentoId': 194, 'encaminhamento': 'ENCERRAR ATENDIMENTO ', 'tipoEncaminhamentoId': 18}
+MOTIVO_PADRAO = 3          # "Alta Melhorado" (o que o RT usou no encerramento manual)
+MINIMO_HORAS = 24          # nunca encerra retorno aberto há menos que isso, venha o pedido de onde vier
+MOTIVO_LIBERAR = 'FINALIZAR ATENDIMENTO'
+
+
+def procurar(obj, chave):
+    """Primeiro valor não vazio de `chave` em qualquer nível do JSON."""
+    if isinstance(obj, dict):
+        if obj.get(chave) not in (None, '', 0):
+            return obj[chave]
+        obj = list(obj.values())
+    if isinstance(obj, list):
+        for v in obj:
+            achado = procurar(v, chave)
+            if achado not in (None, '', 0):
+                return achado
+    return None
+
+
+def montar_encerramento(item_fila, atual):
+    """Corpo do POST api/AtendimentoEncaminhamento, igual ao que a tela do Gestor envia.
+    None se o atendimento não tem CID registrado (aí a baixa fica para ser feita à mão)."""
+    cid_id = procurar(atual, 'cidId')
+    if not cid_id:
+        return None
+    cid_texto = procurar(atual, 'cidFilter') or ' - '.join(str(x) for x in (procurar(atual, 'cidCodigo') or procurar(atual, 'codigo'), procurar(atual, 'cidDescricao') or procurar(atual, 'descricao')) if x)
+    return {'pacienteAtendimentoId': int(item_fila['pacienteAtendimentoId']), 'encaminhamentoId': ENCERRAR['encaminhamentoId'],
+            'encaminhamentoFilter': dict(ENCERRAR), 'motivoEncerramentoId': int(procurar(atual, 'motivoEncerramentoId') or MOTIVO_PADRAO),
+            'cidId': int(cid_id), 'cidFilter': str(cid_texto or ''),
+            'atendimentoTipoId': int(item_fila.get('atendimentoTipoId') or procurar(atual, 'atendimentoTipoId') or 0)}
+
+
 class PainelBaixas:
     def __init__(self, cliente=None, relogio=time.time):
         from gestor_saude import cliente_compartilhado
@@ -62,6 +97,42 @@ class PainelBaixas:
                 pagina += 1
         return self.cliente._com_token(ler)
 
+    def conta(self):
+        """Nome da conta do Gestor que o site usa: é nela que as baixas ficam registradas."""
+        try:
+            return self.cliente._claims(self.cliente.token).get('username') or ''
+        except (AttributeError, IndexError, ValueError, TypeError):
+            return ''
+
     def obter(self, horas):
         lista = candidatos(self.fila_completa(), horas)
-        return {'horas': horas, 'candidatos': lista, 'lidoEm': self.relogio(), 'podeEncerrar': False}
+        return {'horas': horas, 'candidatos': lista, 'lidoEm': self.relogio(), 'podeEncerrar': True, 'conta': self.conta()}
+
+    def encerrar(self, atendimento_id, simular=True):
+        """Encerra UM retorno esquecido. Confere tudo de novo no Gestor antes (ainda aberto, é retorno, passou de 24 h).
+        simular=True só lê e devolve o que seria enviado, sem alterar nada."""
+        from urllib.parse import quote
+        item = next((i for i in self.fila_completa() if str(i.get('pacienteAtendimentoId')) == str(atendimento_id)), None)
+        if not item:
+            return {'id': atendimento_id, 'ok': False, 'mensagem': 'Não está mais aberto no Gestor (alguém já deu baixa).'}
+        if not candidatos([item], MINIMO_HORAS):
+            return {'id': atendimento_id, 'ok': False, 'mensagem': f'Não é retorno aberto há mais de {MINIMO_HORAS} h; nada foi feito.'}
+        nome = (candidatos([item], MINIMO_HORAS)[0]['primeiroNome'])
+
+        def ler(caminho, metodo='GET'):
+            return self.cliente._com_token(lambda: self.cliente._chamar(caminho, token=self.cliente.token, metodo=metodo))
+
+        atual = ler(f'api/PacienteAtendimento/FindAtendimentoEncaminhamento/{int(atendimento_id)}')
+        corpo = montar_encerramento(item, atual)
+        if not corpo:
+            return {'id': atendimento_id, 'nome': nome, 'ok': False, 'mensagem': 'Sem CID registrado no atendimento: dar baixa à mão no Gestor.'}
+        resumo = f"CID {corpo['cidFilter'] or corpo['cidId']} · motivo {corpo['motivoEncerramentoId']}"
+        if simular:
+            return {'id': atendimento_id, 'nome': nome, 'ok': True, 'simulado': True, 'mensagem': f'Pronto para encerrar ({resumo}).'}
+        conta = normalizar(self.conta())
+        preso = normalizar(item.get('profissionalNome'))
+        if normalizar(item.get('descricaoSituacao')) == 'ATENDIMENTO' and preso and preso != conta:
+            ler(f'api/PacienteAtendimento/Funcao/{int(atendimento_id)}/4/{quote(MOTIVO_LIBERAR)}', 'POST')
+        ler(f'api/PacienteAtendimento/Funcao/{int(atendimento_id)}/1/0', 'POST')     # Atender
+        self.cliente._com_token(lambda: self.cliente._chamar('api/AtendimentoEncaminhamento', corpo, token=self.cliente.token))
+        return {'id': atendimento_id, 'nome': nome, 'ok': True, 'mensagem': f'Atendimento encerrado ({resumo}).'}

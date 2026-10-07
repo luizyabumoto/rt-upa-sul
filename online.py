@@ -474,6 +474,20 @@ def app(environ, start_response):
                 return respond(200, BAIXAS.obter(int(horas)))
             except GestorSaudeError as erro:
                 raise ApiError(503, str(erro) or 'O Gestor Saúde não respondeu.')
+        if path == '/api/baixas/encerrar' and method == 'POST':
+            # Um retorno por pedido (a tela chama um de cada vez e mostra o andamento).
+            from baixas import PainelBaixas
+            from gestor_saude import GestorSaudeError
+            alvo, simular = payload.get('id'), payload.get('simular', True)
+            if not isinstance(alvo, int) or alvo <= 0 or not isinstance(simular, bool):
+                raise ApiError(400, 'Pedido inválido.')
+            BAIXAS = BAIXAS or PainelBaixas()
+            try:
+                resultado = BAIXAS.encerrar(alvo, simular=simular)
+            except GestorSaudeError as erro:
+                resultado = {'id': alvo, 'ok': False, 'mensagem': str(erro) or 'O Gestor Saúde não respondeu.'}
+            print(json.dumps({'baixa': resultado.get('ok'), 'simulado': simular, 'id': alvo, 'por': user.get('email')}))
+            return respond(200, resultado)
         if path == '/api/equipe' and method == 'GET':
             # Quem está atendendo no plantão agora (consultórios e Box), pela produção do Gestor Saúde.
             global EQUIPE

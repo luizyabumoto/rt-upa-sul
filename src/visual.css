@@ -224,3 +224,11 @@ header.com-marca small{margin-left:50px!important}
 /* Títulos de tabela e rótulos de números: cinza discreto no claro (o gerado deixava em azul) */
 :root[data-theme="light"] .prod-table th,:root[data-theme="light"] .flow-kpi-label,:root[data-theme="light"] .resumo-label,:root[data-theme="light"] .fs-stat span,:root[data-theme="light"] .flow-summary .fs-stat span{color:var(--text-3)!important}
 :root[data-theme="light"] .flow-kpi-value,:root[data-theme="light"] .resumo-valor{color:var(--text)!important}
+
+/* Aba Baixas */
+.bx-acoes{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.bx-ok{color:#15803d;font-weight:600}
+.bx-erro{color:#b91c1c;font-weight:600}
+:root[data-theme="dark"] .bx-ok{color:#4ade80}
+:root[data-theme="dark"] .bx-erro{color:#f87171}
+.baixas .int-hero-acoes label{display:flex;flex-direction:column;font-size:12px;gap:4px}
