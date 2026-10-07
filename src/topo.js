@@ -6,6 +6,7 @@ const COR_BARRA = {dark: '#070b12', light: '#f4f6fb'};
 const ICONES = {
  overview: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
  internados: '<path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3h-7v3"/><circle cx="7" cy="11" r="2"/>',
+ baixas: '<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
  flow: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
  production: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
  schedule: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',

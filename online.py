@@ -18,7 +18,7 @@ from export_excel import export, export_cinderela, slot_bounds, nome_arquivo, co
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 2_000_000
-ASSETS = {'/src/ferias.js', '/src/datas.js', '/src/internados.js', '/src/equipe.js', '/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
+ASSETS = {'/src/ferias.js', '/src/baixas.js', '/src/datas.js', '/src/internados.js', '/src/equipe.js', '/src/documentos.js', '/src/topo.js', '/src/tema.js', '/src/assistant.js','/src/doctor-picker.js','/src/quick-view.js','/src/pdf.js','/src/roster.js','/src/scheduling.js','/src/coverage-ui.js','/src/schedule-view.js','/src/push.js', '/src/organizer.js', '/src/app.js', '/src/calendar.js', '/src/template-map.js', '/src/online-store.js', '/src/flow.js', '/src/production.js', '/src/demand.js', '/src/trocas.js', '/src/historico.js', '/src/escala-alertas.js', '/src/versoes.js', '/src/resumo.js', '/src/espera.js', '/src/cadastro.js', '/src/atencao.js', '/src/painel.js', '/src/lotacao.js'}
 # Um painel por processo: o token do Gestor Saúde e a última leitura ficam só em memória.
 FLUXO = None
 PRODUCAO = None
@@ -26,6 +26,7 @@ DEMANDA = None
 CENSO = None
 INTERNACAO = None
 EQUIPE = None
+BAIXAS = None
 
 
 def parse_minuto(valor):
@@ -459,6 +460,20 @@ def app(environ, start_response):
             CENSO = CENSO or Censo()
             INTERNACAO = INTERNACAO or (PainelInternacao() if cliente_compartilhado().configurado else None)
             return respond(200, internados(CENSO, INTERNACAO))
+        if path == '/api/baixas' and method == 'GET':
+            # Retornos esquecidos abertos no Gestor há mais de X horas (só leitura).
+            global BAIXAS
+            from urllib.parse import parse_qs
+            from baixas import PainelBaixas
+            horas = (parse_qs(environ.get('QUERY_STRING', '')).get('horas') or ['24'])[0]
+            if not horas.isdigit() or not 1 <= int(horas) <= 720:
+                raise ApiError(400, 'Informe as horas entre 1 e 720.')
+            from gestor_saude import GestorSaudeError
+            BAIXAS = BAIXAS or PainelBaixas()
+            try:
+                return respond(200, BAIXAS.obter(int(horas)))
+            except GestorSaudeError as erro:
+                raise ApiError(503, str(erro) or 'O Gestor Saúde não respondeu.')
         if path == '/api/equipe' and method == 'GET':
             # Quem está atendendo no plantão agora (consultórios e Box), pela produção do Gestor Saúde.
             global EQUIPE

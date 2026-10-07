@@ -21,6 +21,7 @@ import {mountCabecalho, mountAtencao} from './painel.js';
 import {mountLotacao} from './lotacao.js';
 import {mountDocumentos} from './documentos.js';
 import {mountInternados} from './internados.js';
+import {mountBaixas} from './baixas.js';
 import {mountEquipeAgora} from './equipe.js';
 import {mountTopo} from './topo.js';
 import {mountDatasBR} from './datas.js';
@@ -139,6 +140,7 @@ try{mountCabecalho();mountAtencao(storage,seed);}catch(error){console.error('Mé
 try{mountLotacao(storage,seed);}catch(error){console.error('Lotação',error);}
 try{mountDocumentos(storage);}catch(error){console.error('Documentos',error);}
 try{mountInternados();}catch(error){console.error('Internados',error);}
+try{mountBaixas();}catch(error){console.error('Baixas',error);}
 try{mountEquipeAgora(storage,seed);}catch(error){console.error('Equipe agora',error);}
 try{mountTopo();}catch(error){console.error('Tema e impressão',error);}
 try{mountDatasBR();}catch(error){console.error('Datas',error);}
