@@ -49,32 +49,69 @@ function riskCard(c) {
  return card;
 }
 
-// Resumo grande do Painel: quantos aguardam médico, maior espera, áreas e a barra por classificação de risco.
+// As cinco cores de Manchester aparecem sempre no Painel (mesmo com zero), na ordem de gravidade.
+export const ORDEM_MANCHESTER = [['vermelho', 'Emergência'], ['laranja', 'Muito urgente'], ['amarelo', 'Urgente'], ['verde', 'Pouco urgente'], ['azul', 'Não urgente']];
+
+// Situação de cada cor: 'vazio' (ninguém), 'ok', 'atencao' (passou de 75% do alvo) ou 'alerta' (passou do alvo).
+export function situacaoRisco(c) {
+ const alvo = ALVO_MANCHESTER[c.chave];
+ if (!c.aguardando) return 'vazio';
+ if (alvo === undefined || c.maiorEspera === null || c.maiorEspera === undefined) return 'ok';
+ if (c.maiorEspera > alvo) return 'alerta';
+ return alvo && c.maiorEspera >= alvo * 0.75 ? 'atencao' : 'ok';
+}
+
+export function coresDoPainel(classificacoes) {
+ const porChave = new Map((classificacoes || []).map(c => [c.chave, c]));
+ const fixas = ORDEM_MANCHESTER.map(([chave, descricao]) => ({chave, nome: chave[0].toUpperCase() + chave.slice(1), descricao, aguardando: 0, maiorEspera: null, media: null, adulto: 0, pediatria: 0, ...porChave.get(chave)}));
+ const outras = (classificacoes || []).filter(c => !ORDEM_MANCHESTER.some(([k]) => k === c.chave) && c.aguardando);
+ return [...fixas, ...outras];
+}
+
+// Painel: semáforo de Manchester. Número grande por cor, maior espera, barra até o tempo-alvo e pisca quando estoura.
 function resumoPainel(summary, d, estado) {
- const estourados = d.classificacoes.filter(c => ALVO_MANCHESTER[c.chave] !== undefined && c.maiorEspera !== null && c.maiorEspera > ALVO_MANCHESTER[c.chave]);
- const principal = el('div', 'fs-main'), numero = el('p', 'fs-numero');
- numero.append(el('strong', 'fs-num', String(d.total.aguardando)), el('span', '', d.total.aguardando === 1 ? ' paciente aguardando médico' : ' pacientes aguardando médico'));
- const stats = el('div', 'fs-stats');
- const stat = (rotulo, valor, alerta) => { const b = el('div', `fs-stat${alerta ? ' alerta' : ''}`); b.append(el('span', '', rotulo), el('strong', '', valor)); return b; };
- stats.append(stat('Maior espera', formatarEspera(d.total.maiorEspera), estourados.length > 0), stat('Espera média', formatarEspera(d.total.media)),
-  stat('Adulto', `${d.adulto.aguardando}`), stat('Pediatria', `${d.pediatria.aguardando}`), stat('Na triagem', `${d.triagem.aguardando}`));
- principal.append(numero, stats);
- const risco = el('div', 'fs-risco'), barra = el('div', 'fs-barra'), legenda = el('ul', 'fs-legenda');
- barra.setAttribute('role', 'img');
- barra.setAttribute('aria-label', 'Aguardando por classificação: ' + d.classificacoes.map(c => `${c.nome} ${c.aguardando}`).join(', '));
- for (const c of d.classificacoes) {
-  if (!c.aguardando) continue;
-  const seg = el('span'); seg.style.flexGrow = c.aguardando; seg.style.background = TOM[c.chave] || c.cor; seg.title = `${c.nome}: ${c.aguardando}`;
-  barra.append(seg);
-  const item = el('li', estourados.includes(c) ? 'alerta' : ''), dot = el('span', 'flow-dot'); dot.style.setProperty('--risk', TOM[c.chave] || c.cor);
-  item.append(dot, el('span', '', c.nome), el('strong', '', String(c.aguardando)));
-  if (estourados.includes(c)) item.append(el('small', '', `⚠ ${formatarEspera(c.maiorEspera)}`));
-  legenda.append(item);
+ const cores = coresDoPainel(d.classificacoes);
+ const estourados = cores.filter(c => situacaoRisco(c) === 'alerta');
+ summary.classList.toggle('pm-em-alerta', estourados.length > 0);
+
+ const topo = el('div', 'pm-topo');
+ const total = el('div', 'pm-total');
+ total.append(el('strong', 'pm-total-num', String(d.total.aguardando)), el('span', 'pm-total-txt', d.total.aguardando === 1 ? 'paciente aguardando médico' : 'pacientes aguardando médico'));
+ const chips = el('div', 'pm-chips');
+ const chip = (rotulo, valor, classe = '') => { const c = el('span', `pm-chip ${classe}`); c.append(el('span', '', rotulo), el('strong', '', valor)); return c; };
+ chips.append(chip('Adulto', String(d.adulto.aguardando)), chip('Pediatria', String(d.pediatria.aguardando)), chip('Na triagem', String(d.triagem.aguardando)),
+  chip('Maior espera', formatarEspera(d.total.maiorEspera), estourados.length ? 'pm-chip-alerta' : ''), chip('Média', formatarEspera(d.total.media)));
+ topo.append(total, chips);
+
+ const grade = el('div', 'pm-grade');
+ for (const c of cores) {
+  const alvo = ALVO_MANCHESTER[c.chave], sit = situacaoRisco(c);
+  const card = el('article', `pm-cor pm-${sit}`);
+  card.style.setProperty('--cor', TOM[c.chave] || c.cor || '#8391a7');
+  card.setAttribute('aria-label', `${c.nome}: ${c.aguardando} aguardando${c.aguardando ? `, maior espera ${formatarEspera(c.maiorEspera)}` : ''}${sit === 'alerta' ? ', acima do tempo-alvo' : ''}`);
+  const cab = el('div', 'pm-cor-cab');
+  cab.append(el('span', 'pm-cor-nome', c.nome.toUpperCase()), el('span', 'pm-cor-desc', c.descricao || ''));
+  const num = el('strong', 'pm-cor-num', String(c.aguardando));
+  const info = el('div', 'pm-cor-info');
+  if (c.aguardando) {
+   info.append(el('span', '', `Maior espera ${formatarEspera(c.maiorEspera)}`), el('span', '', `Adulto ${c.adulto} · Ped ${c.pediatria}`));
+  } else info.append(el('span', '', 'Ninguém aguardando'));
+  card.append(cab, num, info);
+  if (alvo !== undefined) {
+   const barra = el('div', 'pm-barra'), cheio = el('span');
+   const pct = !c.aguardando || c.maiorEspera === null ? 0 : alvo === 0 ? 100 : Math.min(100, Math.round(c.maiorEspera / alvo * 100));
+   cheio.style.width = `${pct}%`;
+   barra.append(cheio);
+   card.append(barra, el('small', 'pm-alvo', sit === 'alerta' ? `⚠ Passou do alvo (${alvo === 0 ? 'imediato' : formatarEspera(alvo)})` : `Alvo ${alvo === 0 ? 'imediato' : formatarEspera(alvo)}`));
+  }
+  grade.append(card);
  }
- if (!d.total.aguardando) risco.append(el('p', 'fs-vazio', '✓ Ninguém aguardando médico agora'));
- else risco.append(barra, legenda);
- if (estourados.length) risco.append(el('p', 'fs-alerta', `⚠ ${estourados.length === 1 ? '1 classificação passou' : `${estourados.length} classificações passaram`} do tempo-alvo de Manchester`));
- summary.append(principal, risco, el('small', 'fs-rodape', `Atualizado ${tempoDesde(estado.atualizadoEm)} · abrir fluxo completo →`));
+
+ summary.append(topo);
+ if (estourados.length) {
+  summary.append(el('p', 'pm-faixa', `⚠ ALERTA · ${estourados.map(c => `${c.nome} ${formatarEspera(c.maiorEspera)}`).join(' · ')} — acima do tempo-alvo de Manchester`));
+ }
+ summary.append(grade, el('small', 'fs-rodape', `Atualizado ${tempoDesde(estado.atualizadoEm)} · abrir fluxo completo →`));
 }
 
 export function mountFlow() {
