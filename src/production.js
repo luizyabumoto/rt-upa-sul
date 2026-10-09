@@ -70,6 +70,29 @@ export function ranking(registros) {
   .sort((a, b) => b.total - a.total || b.retornos - a.retornos || a.medico.localeCompare(b.medico, 'pt-BR'));
 }
 
+// Ranking proporcional: consultas por plantão trabalhado (quem fez 10 plantões não fica na frente só por isso).
+// Plantão curto (primeira → última consulta em até 7 h: cinderela, saiu no meio, entrou no meio) conta como meio plantão.
+export const MIN_PLANTOES_RANKING = 2;
+export function pesoPlantao(r) {
+ if (!r.primeiro || !r.ultimo) return 1;
+ return (Date.parse(r.ultimo) - Date.parse(r.primeiro)) / HORA <= 7 ? 0.5 : 1;
+}
+export function rankingProporcional(registros) {
+ const porMedico = new Map();
+ for (const r of registros) {
+  if (!consultas(r)) continue;
+  const m = porMedico.get(r.medico) || {medico: r.medico, total: 0, adulto: 0, pediatria: 0, plantoes: 0, curtos: 0};
+  m.total += consultas(r); m.adulto += r.adulto; m.pediatria += r.pediatria;
+  const peso = pesoPlantao(r);
+  m.plantoes += peso; if (peso < 1) m.curtos += 1;
+  porMedico.set(r.medico, m);
+ }
+ const todos = [...porMedico.values()].map(m => ({...m, porPlantao: m.total / m.plantoes}));
+ const entram = todos.filter(m => m.plantoes >= MIN_PLANTOES_RANKING).sort((a, b) => b.porPlantao - a.porPlantao || b.plantoes - a.plantoes);
+ const somaT = entram.reduce((s, m) => s + m.total, 0), somaP = entram.reduce((s, m) => s + m.plantoes, 0);
+ return {ranking: entram, poucos: todos.filter(m => m.plantoes < MIN_PLANTOES_RANKING).sort((a, b) => b.porPlantao - a.porPlantao), mediaUnidade: somaP ? somaT / somaP : 0};
+}
+
 const segundaFeira = data => { const d = new Date(data + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
 export function chaveGrupo(r, agrupamento) {
  if (agrupamento === 'plantao') return [`${r.data}${r.turno}`, `${dataBR(r.data)} · ${r.turno === 'D' ? 'Diurno 07h–19h' : 'Noturno 19h–07h'}`];
@@ -523,6 +546,52 @@ export function mountProduction(storage, seed) {
   box.append(card);
  }
 
+ // Gráfico do ranking proporcional (uma série: barras horizontais ordenadas + linha da média da unidade).
+ const um = n => n.toFixed(1).replace('.', ',');
+ const fmtPl = n => `${Number.isInteger(n) ? n : um(n)} ${n === 1 ? 'plantão' : 'plantões'}`;
+ let dica = null;
+ function graficoProporcional(registros, nomeArea) {
+  const {ranking: lista, poucos, mediaUnidade} = rankingProporcional(registros);
+  const box = el('section', 'rp-card');
+  const cab = el('div', 'rp-cab');
+  cab.append(el('h3', '', `Ranking proporcional · ${nomeArea.toLowerCase()}`),
+   el('p', 'muted', `Consultas por plantão trabalhado. Média da unidade: ${um(mediaUnidade)} por plantão. Plantão curto (até 7 h de atendimento) conta como meio.`));
+  box.append(cab);
+  if (!lista.length) { box.append(el('p', 'notice', `Nenhum médico com ${MIN_PLANTOES_RANKING} ou mais plantões neste período. Escolha um período maior (ex.: mês).`)); return box; }
+  const max = Math.max(...lista.map(m => m.porPlantao), mediaUnidade) * 1.08;
+  const grafico = el('div', 'rp-grafico');
+  grafico.style.setProperty('--media', `${(mediaUnidade / max) * 100}%`);
+  grafico.setAttribute('role', 'img');
+  grafico.setAttribute('aria-label', `Ranking proporcional ${nomeArea}: ` + lista.map((m, i) => `${i + 1}º ${m.medico}, ${um(m.porPlantao)} por plantão`).join('; '));
+  lista.forEach((m, i) => {
+   const linha = el('div', 'rp-linha');
+   const nome = el('button', 'rp-nome', m.medico.split(' ').slice(0, 3).join(' '));
+   nome.type = 'button'; nome.title = 'Ver detalhes do médico'; nome.onclick = () => abrirMedico(m.medico);
+   const trilho = el('div', 'rp-trilho'), barra = el('span', 'rp-barra');
+   barra.style.width = `${(m.porPlantao / max) * 100}%`;
+   trilho.append(barra);
+   const valor = el('span', 'rp-valor');
+   valor.append(el('strong', '', um(m.porPlantao)), el('small', '', ` · ${fmtPl(m.plantoes)}`));
+   linha.append(el('span', 'rp-pos', `${i + 1}º`), nome, trilho, valor);
+   const dif = mediaUnidade ? Math.round((m.porPlantao / mediaUnidade - 1) * 100) : 0;
+   linha.addEventListener('mousemove', e => {
+    if (!dica) { dica = el('div', 'rp-dica'); document.body.append(dica); }
+    dica.replaceChildren(el('strong', '', m.medico), el('span', '', `${um(m.porPlantao)} consultas por plantão (${dif >= 0 ? '+' : ''}${dif}% vs média)`),
+     el('span', '', `${m.total} consultas em ${fmtPl(m.plantoes)}${m.curtos ? ` · ${m.curtos} curto${m.curtos > 1 ? 's' : ''}` : ''}`));
+    dica.hidden = false;
+    dica.style.left = `${Math.min(e.clientX + 14, innerWidth - dica.offsetWidth - 8)}px`;
+    dica.style.top = `${e.clientY + 14}px`;
+   });
+   linha.addEventListener('mouseleave', () => { if (dica) dica.hidden = true; });
+   grafico.append(linha);
+  });
+  const legenda = el('p', 'rp-legenda');
+  legenda.append(el('span', 'rp-leg-barra'), document.createTextNode(' Consultas por plantão   '), el('span', 'rp-leg-media'), document.createTextNode(` Média da unidade (${um(mediaUnidade)}): quem passa da linha está acima da média`));
+  box.append(grafico, legenda);
+  if (poucos.length) box.append(el('p', 'muted rp-poucos', `Fora do ranking (menos de ${MIN_PLANTOES_RANKING} plantões no período): ${poucos.map(m => `${m.medico.split(' ').slice(0, 2).join(' ')} (${m.total} em ${fmtPl(m.plantoes)})`).join(' · ')}`));
+  return box;
+ }
+
  function render() {
   const updated = $('.prod-updated'), alerta = $('.prod-alert');
   if (!dados) return;
@@ -551,6 +620,13 @@ export function mountProduction(storage, seed) {
   if (agrupamento !== 'total' && !buscaAtual) tabelas.append(tabelaGrupos(agrupamento));
   // Clínicos e pediatras em rankings separados (cada um com a sua numeração).
   const areas = AREAS_PROD.filter(([a]) => !areaAtual || a === areaAtual).map(([a, nome]) => [nome, lista.filter(m => areaMedico(m) === a)]).filter(([, l]) => l.length);
+  if (!buscaAtual) {
+   const doPeriodo = filtra(dados.registros);
+   for (const [area, nome] of AREAS_PROD.filter(([a]) => !areaAtual || a === areaAtual)) {
+    const nomes = new Set(lista.filter(m => areaMedico(m) === area).map(m => m.medico));
+    if (nomes.size) tabelas.append(graficoProporcional(doPeriodo.filter(r => nomes.has(r.medico)), nome));
+   }
+  }
   for (const [nome, l] of areas) tabelas.append(tabelaRanking(l, `Ranking de consultas · ${nome.toLowerCase()} (${l.filter(m => m.total).length})`));
   if (!buscaAtual) tabelas.append(tabelaEquipes());
   tabelas.append(tabelaPerfilHora(), tabelaAtrasos(), tabelaCruzamento(), tabelaFaltas());
